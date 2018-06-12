@@ -48,13 +48,15 @@ class TriggerPlugin(Plugin):
 		
 		return None
 	
-	async def execute_script(self, shell, command, server, channel, author, perm, level):
+	async def execute_script(self, shell, command, param, server, channel, author, perm, level):
 		script = await self.get_trigger_script(command, server)
 		if script:
 			script = script.split("\n");
 			for s in script:
 				args = s.split(" ");
-				await shell.execute_command(args[0], " ".join(args[1:]), server, channel, author, perm, level+1)
+				c = args[0]
+				o = " ".join(args[1:]).replace("{{param}}", param)
+				await shell.execute_command(c, o, server, channel, author, perm, level+1)
 			return True
 		return False
 		
@@ -163,26 +165,26 @@ class TriggerPlugin(Plugin):
 		elif command == "show_trigger":
 			return await self.execute_show_trigger(command, options, server, channel, author, perm, level)
 		elif self.command_regex.fullmatch(command):
-			return await self.execute_script(shell, command, server, channel, author, UserPermission.Script, level+1)
+			return await self.execute_script(shell, command, options, server, channel, author, UserPermission.Script, level+1)
 		
 		return False
 	
 	async def on_member_join(self, shell, member):
 		s = member.server
-		await self.execute_script(shell, "@join", s, self.ctx.get_default_channel(s), member, UserPermission.Script, 1)
+		await self.execute_script(shell, "@join", "", s, self.ctx.get_default_channel(s), member, UserPermission.Script, 1)
 		return True
 	
 	async def on_member_leave(self, shell, member):
 		s = member.server
-		await self.execute_script(shell, "@leave", s, self.ctx.get_default_channel(s), member, UserPermission.Script, 1)
+		await self.execute_script(shell, "@leave", "", s, self.ctx.get_default_channel(s), member, UserPermission.Script, 1)
 		return True
 	
 	async def on_ban(self, shell, member):
 		s = member.server
-		await self.execute_script(shell, "@ban", s, self.ctx.get_default_channel(s), member, UserPermission.Script, 1)
+		await self.execute_script(shell, "@ban", "", s, self.ctx.get_default_channel(s), member, UserPermission.Script, 1)
 		return True
 	
 	async def on_unban(self, shell, server, user):
 		s = server
-		await self.execute_script(shell, "@unban", s, self.ctx.get_default_channel(s), user, UserPermission.Script, 1)
+		await self.execute_script(shell, "@unban", "", s, self.ctx.get_default_channel(s), user, UserPermission.Script, 1)
 		return True
