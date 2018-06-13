@@ -16,7 +16,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
-along with TeeUniverse.  If not, see <http://www.gnu.org/licenses/>.
+along with PraxisBot.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 
@@ -25,7 +25,8 @@ import sys
 import traceback
 
 from context import Context
-from plugin import UserPermission
+from scope import UserPermission
+from scope import ExecutionScope
 from plugins.core import CorePlugin
 from plugins.trigger import TriggerPlugin
 
@@ -45,13 +46,13 @@ class PraxisBot(discord.Client):
 	"""
 	The main class of PraxisBot
 	"""
-	
+
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		
+
 		self.ctx = None
 		self.plugins = []
-	
+
 	def load_plugin(self, plugin):
 		"""
 		Create an instance of a plugin and register it
@@ -62,95 +63,124 @@ class PraxisBot(discord.Client):
 			self.ctx.log("Plugin {0} loaded".format(plugin.name))
 		except:
 			self.ctx.log("Plugin {0} can't be loaded".format(plugin.name))
-	
+
 	def load_all_plugins(self):
 		self.load_plugin(CorePlugin)
 		self.load_plugin(TriggerPlugin)
-	
-	async def execute_command(self, command, options, server, channel, author, perm, level):
-		if level > 8:
-			return
-		
+
+	async def execute_command(self, command, options, scope):
+		if scope.level > 8:
+			return scope
+
 		try:
 			for p in self.plugins:
-				res = await p.execute_command(self, command, options, server, channel, author, perm, level)
-				if res == True:
-					break
-		
+				newScope = await p.execute_command(self, command, options, scope)
+				if scope.iter != newScope.iter:
+					return s
+
 		except:
 			print(traceback.format_exc())
 			pass
-	
+
+		return scope
+
 	async def on_ready(self):
 		self.ctx = Context(self, "testing")
-		
+
 		self.ctx.log("Logged on as {0}".format(self.user))
-		
+
 		self.load_all_plugins()
-	
+
 	async def on_message(self, message):
 		if not self.ctx:
 			return
-		
+
 		if message.channel.is_private:
 			return
 		if message.author.__class__ != discord.Member:
 			return
-		
+
 		prefix = self.ctx.get_command_prefix(message.server)
-		
+
 		if message.content.find(self.user.mention+" ") == 0:
 			command = message.content[len(self.user.mention+" "):]
 		elif prefix and message.content.find(prefix) == 0:
 			command = message.content[len(prefix):]
 		else:
 			return
-		
+
 		args = command.split(" ");
-		
-		perm = UserPermission.Member
+
+		scope = ExecutionScope()
+		scope.server = message.server
+		scope.channel = message.channel
+		scope.author = message.author
 		if message.author.server_permissions.administrator:
-			perm = UserPermission.Admin
-		
-		await self.execute_command(args[0], " ".join(args[1:]), message.server, message.channel, message.author, perm, 0)
-	
+			scope.permission = UserPermission.Admin
+
+		await self.execute_command(args[0], " ".join(args[1:]), scope)
+
 	async def on_member_join(self, member):
 		try:
+			scope = ExecutionScope()
+			scope.server = member.server
+			scope.channel = self.ctx.get_default_channel(member.server)
+			scope.user = member
+			scope.permission = UserPermission.Script
+
 			for p in self.plugins:
-				await p.on_member_join(self, member)
-		
+				await p.on_member_join(self, scope)
+
 		except:
 			print(traceback.format_exc())
 			pass
-	
+
 	async def on_member_remove(self, member):
 		try:
+			scope = ExecutionScope()
+			scope.server = member.server
+			scope.channel = self.ctx.get_default_channel(member.server)
+			scope.user = member
+			scope.permission = UserPermission.Script
+
 			for p in self.plugins:
-				await p.on_member_leave(self, member)
-		
+				await p.on_member_leave(self, scope)
+
 		except:
 			print(traceback.format_exc())
 			pass
-	
+
 	async def on_ban(self, member):
 		try:
+			scope = ExecutionScope()
+			scope.server = member.server
+			scope.channel = self.ctx.get_default_channel(member.server)
+			scope.user = member
+			scope.permission = UserPermission.Script
+
 			for p in self.plugins:
-				await p.on_ban(self, member)
-		
+				await p.on_ban(self, scope)
+
 		except:
 			print(traceback.format_exc())
 			pass
-	
+
 	async def on_unban(self, server, user):
 		try:
+			scope = ExecutionScope()
+			scope.server = member.server
+			scope.channel = self.ctx.get_default_channel(member.server)
+			scope.user = member
+			scope.permission = UserPermission.Script
+
 			for p in self.plugins:
-				await p.on_unban(self, server, user)
-		
+				await p.on_unban(self, scope)
+
 		except:
 			print(traceback.format_exc())
 			pass
-		
-	
+
+
 ########################################################################
 # Execute
 

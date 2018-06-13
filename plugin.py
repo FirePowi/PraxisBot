@@ -14,7 +14,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
-along with TeeUniverse.  If not, see <http://www.gnu.org/licenses/>.
+along with PraxisBot.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 
@@ -29,31 +29,26 @@ class RedirectOutput():
 		self.dest = dest
 		self.old_stdout = sys.stdout
 		self.old_stderr = sys.stderr
-	
+
 	def __enter__(self):
 		sys.stdout = self.dest
 		sys.stderr = self.dest
-	
+
 	def __exit__(self, *args):
 		sys.stdout = self.old_stdout
 		sys.stderr = self.old_stderr
 
-class UserPermission:
-	Member=0
-	Script=1
-	Admin=2
-	
 class Plugin:
-		
+
 	"""
 	Base class of all plugins
 	"""
 	def __init__(self, ctx):
 		self.ctx = ctx
-		
+
 	async def parse_options(self, channel, parser, options):
 		isValid = False
-		
+
 		argParseOutput = io.StringIO()
 		try:
 			with RedirectOutput(argParseOutput):
@@ -62,20 +57,20 @@ class Plugin:
 		except:
 			await self.ctx.send_message(channel, argParseOutput.getvalue())
 			pass
-		
+
 		return None
-	
-	async def execute_command(self, shell, command, server, channel, author, perm, level):
+
+	async def execute_command(self, shell, command, scope):
+		return scope
+
+	async def on_member_join(self, shell, scope):
 		return False
-	
-	async def on_member_join(self, shell, member):
+
+	async def on_member_leave(self, shell, scope):
 		return False
-	
-	async def on_member_leave(self, shell, member):
+
+	async def on_ban(self, shell, scope):
 		return False
-	
-	async def on_ban(self, shell, member):
-		return False
-	
-	async def on_unban(self, shell, server, user):
+
+	async def on_unban(self, shell, scope):
 		return False
