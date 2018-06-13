@@ -113,13 +113,18 @@ class CorePlugin(Plugin):
 		if args:
 			a = self.ctx.format_text(args.a, scope)
 			b = self.ctx.format_text(args.b, scope)
+			
 			res = False
 			if args.equal:
 				res = (a == b)
 			elif args.hasrole:
 				u = self.ctx.find_member(a, scope.server)
 				r = self.ctx.find_role(b, scope.server)
-				res = u and r and r in u.roles
+				if r and u:
+					for i in u.roles:
+						if i.id == r.id:
+							res = True
+							break
 			if args.inverse:
 				res = not res
 
