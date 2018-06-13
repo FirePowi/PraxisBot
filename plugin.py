@@ -60,6 +60,29 @@ class Plugin:
 
 		return None
 
+	async def execute_script(self, shell, script, scope):
+		subScope = scope
+		subScope.level = subScope.level+1
+		for s in script:
+			args = s.split(" ");
+			c = args[0]
+			b = None
+			if len(subScope.blocks) > 0:
+				b = subScope.blocks[len(subScope.blocks)-1]
+			if b and b.endname == c:
+				subScope.blocks.pop()
+			elif not b or b.execute:
+				o = " ".join(args[1:])
+				subScope = await shell.execute_command(c, o, subScope)
+				if subScope.abort:
+					break
+		scope = subScope
+		scope.level = scope.level-1
+		return scope
+
+	async def list_commands(self, server):
+		return []
+
 	async def execute_command(self, shell, command, scope):
 		return scope
 

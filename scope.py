@@ -38,3 +38,5 @@ class ExecutionScope:
 		self.user = None
 		self.channel = None
 		self.blocks = []
+		self.abort = False
+		self.deletecmd = False

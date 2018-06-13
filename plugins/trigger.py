@@ -38,7 +38,7 @@ class TriggerPlugin(Plugin):
 		super().__init__(ctx)
 		self.command_regex = re.compile('[a-zA-Z0-9_-]+')
 
-		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"triggers(id INTEGER PRIMARY KEY, discord_sid INTEGER, command TEXT, script TEXT)");
+		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"triggers(id INTEGER PRIMARY KEY, discord_sid INTEGER, command TEXT, script TEXT, description TEXT, deletecmd INTEGER)");
 
 	async def get_trigger_script(self, command, server):
 		with self.ctx.dbcon:
@@ -50,26 +50,24 @@ class TriggerPlugin(Plugin):
 
 		return None
 
-	async def execute_script(self, shell, command, param, scope):
-		script = await self.get_trigger_script(command, scope.server)
+	async def execute_trigger_script(self, shell, command, param, scope):
+		script = None
+		autodelete = False
+
+		with self.ctx.dbcon:
+			c = self.ctx.dbcon.cursor()
+			c.execute("SELECT script, deletecmd FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ? AND command = ?", [int(scope.server.id), command])
+			r = c.fetchone()
+			if r:
+				script = r[0]
+				autodelete = (r[1] > 0)
+
 		if script:
 			script = script.split("\n");
 			subScope = scope
-			subScope.level = subScope.level+1
+			subScope.deletecmd = autodelete
 			subScope.vars["params"] = param
-			for s in script:
-				args = s.split(" ");
-				c = args[0]
-				b = None
-				if len(subScope.blocks) > 0:
-					b = subScope.blocks[len(subScope.blocks)-1]
-				if b and b.endname == c:
-					subScope.blocks.pop()
-				elif not b or b.execute:
-					o = " ".join(args[1:])
-					subScope = await shell.execute_command(c, o, subScope)
-			scope = subScope
-			scope.level = scope.level-1
+			return await self.execute_script(shell, script, subScope)
 		return scope
 
 
@@ -87,6 +85,8 @@ class TriggerPlugin(Plugin):
 		parser = argparse.ArgumentParser(description='Associate a script to a trigger. The script must be written on the line after the command.', prog=command)
 		parser.add_argument('command', help='Name of the trigger')
 		parser.add_argument('--force', '-f', action='store_true', help='Replace the trigger if it already exists')
+		parser.add_argument('--autodelete', '-a', action='store_true', help='Delete the command after execute it')
+		parser.add_argument('--description', '-d', default="", help='Description of the command')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
@@ -105,7 +105,7 @@ class TriggerPlugin(Plugin):
 			if command_chk:
 				if args.force:
 					with self.ctx.dbcon:
-						if self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"triggers SET script = ? WHERE discord_sid = ? AND command = ?", [str("\n".join(script)), int(scope.server.id), str(args.command)]):
+						if self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"triggers SET script = ?, deletecmd = ?, description = ? WHERE discord_sid = ? AND command = ?", [str("\n".join(script)), int(args.autodelete), str(args.description), int(scope.server.id), str(args.command)]):
 							await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` edited.")
 						else:
 							await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` can't be edited (internal error).")
@@ -113,7 +113,7 @@ class TriggerPlugin(Plugin):
 					await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` already exists. Please use --force to replace it.")
 			else:
 				with self.ctx.dbcon:
-					if self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"triggers (discord_sid, command, script) VALUES (?, ?, ?)", [int(scope.server.id), str(args.command), str("\n".join(script))]):
+					if self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"triggers (discord_sid, command, script, deletecmd, description) VALUES (?, ?, ?, ?, ?)", [int(scope.server.id), str(args.command), str("\n".join(script)), int(args.autodelete), str(args.description)]):
 						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` created.")
 					else:
 						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` can't be created (internal error).")
@@ -162,6 +162,14 @@ class TriggerPlugin(Plugin):
 
 		return scope
 
+	async def list_commands(self, server):
+		res = ["add_trigger", "delete_trigger", "show_trigger"]
+		with self.ctx.dbcon:
+			c = self.ctx.dbcon.cursor()
+			for row in c.execute("SELECT command FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ?", [int(server.id)]):
+				res.append(row[0])
+		return res
+
 	async def execute_command(self, shell, command, options, scope):
 		if command == "add_trigger":
 			scope.iter = scope.iter+1
@@ -173,22 +181,22 @@ class TriggerPlugin(Plugin):
 			scope.iter = scope.iter+1
 			return await self.execute_show_trigger(command, options, scope)
 		elif self.command_regex.fullmatch(command):
-			return await self.execute_script(shell, command, options, scope)
+			return await self.execute_trigger_script(shell, command, options, scope)
 
 		return scope
 
 	async def on_member_join(self, shell, scope):
-		await self.execute_script(shell, "@join", "", scope)
+		await self.execute_trigger_script(shell, "@join", "", scope)
 		return True
 
 	async def on_member_leave(self, shell, scope):
-		await self.execute_script(shell, "@leave", "", scope)
+		await self.execute_trigger_script(shell, "@leave", "", scope)
 		return True
 
 	async def on_ban(self, shell, scope):
-		await self.execute_script(shell, "@ban", "", scope)
+		await self.execute_trigger_script(shell, "@ban", "", scope)
 		return True
 
 	async def on_unban(self, shell, server, scope):
-		await self.execute_script(shell, "@unban", "", scope)
+		await self.execute_trigger_script(shell, "@unban", "", scope)
 		return True

@@ -103,20 +103,33 @@ class CorePlugin(Plugin):
 		parser = argparse.ArgumentParser(description='Perform tests. Don\'t forget to add a endif line.', prog=command)
 		parser.add_argument('a', help='Value A')
 		parser.add_argument('b', help='Value B')
-		parser.add_argument('--equal', '-e', action='store_true', help='Test if A = B')
-		parser.add_argument('--nequal', '-n', action='store_true', help='Test if A = B')
+		parser.add_argument('--equal', action='store_true', help='Test if A = B')
+		parser.add_argument('--hasrole', action='store_true', help='Test if the user A has the role B')
+		parser.add_argument('--inverse', action='store_true', help='Inverse the result of the test')
+		parser.add_argument('--exit', action='store_true', help='Abort execution if not true')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
 		if args:
 			a = self.ctx.format_text(args.a, scope)
 			b = self.ctx.format_text(args.b, scope)
+			res = False
 			if args.equal:
-				newScope = scope
-				newScope.blocks.append(ExecutionBlock("endif", (a == b)))
-			elif args.nequal:
-				newScope = scope
-				newScope.blocks.append(ExecutionBlock("endif", (a != b)))
+				res = (a == b)
+			elif args.hasrole:
+				u = self.ctx.find_member(a, scope.server)
+				r = self.ctx.find_role(b, scope.server)
+				res = u and r and r in u.roles
+			if args.inverse:
+				res = not res
+
+			newScope = scope
+			if args.exit and not res:
+				newScope.abort = True
+			else:
+				newScope.blocks.append(ExecutionBlock("endif", res))
+			return newScope
+
 		return scope
 
 	async def execute_add_role(self, command, options, scope):
@@ -126,6 +139,7 @@ class CorePlugin(Plugin):
 		parser = argparse.ArgumentParser(description='Add a role to an user.', prog=command)
 		parser.add_argument('user', help='User name')
 		parser.add_argument('role', help='Role name')
+		parser.add_argument('--silent', '-s', action='store_true',  help='Don\'t print errors')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
@@ -134,7 +148,7 @@ class CorePlugin(Plugin):
 			r = self.ctx.format_text(args.role, scope)
 			if await self.ctx.add_role(scope.server, u, r):
 				return scope
-			else:
+			elif not args.silent:
 				await self.ctx.send_message(scope.channel, "Can't add role `"+r+"` to `"+u+"`.")
 
 		return scope
@@ -146,6 +160,7 @@ class CorePlugin(Plugin):
 		parser = argparse.ArgumentParser(description='Remove a role to an user.', prog=command)
 		parser.add_argument('user', help='User name')
 		parser.add_argument('role', help='Role name')
+		parser.add_argument('--silent', '-s', action='store_true',  help='Don\'t print errors')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
@@ -154,7 +169,7 @@ class CorePlugin(Plugin):
 			r = self.ctx.format_text(args.role, scope)
 			if await self.ctx.remove_role(scope.server, u, r):
 				return scope
-			else:
+			elif not args.silent:
 				await self.ctx.send_message(scope.channel, "Can't remove role `"+r+"` to `"+u+"`.")
 
 		return scope
@@ -176,7 +191,31 @@ class CorePlugin(Plugin):
 		await self.ctx.send_message(scope.channel, "Can't change the command prefix.")
 		return scope
 
+	async def execute_script_cmd(self, shell, command, options, scope):
+
+		script = options.split("\n");
+		if len(script) > 0:
+			options = script[0]
+			script = script[1:]
+
+		parser = argparse.ArgumentParser(description='Execute all commands after the first line.', prog=command)
+
+		args = await self.parse_options(scope.channel, parser, options)
+
+		if args:
+			if len(script) == 0:
+				await self.ctx.send_message(scope.channel, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\nscript\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
+				return scope
+
+			return await self.execute_script(shell, script, scope)
+
+		return scope
+
+	async def list_commands(self, server):
+		return ["say", "if", "set_variable", "add_role", "remove_role", "set_command_prefix", "script"]
+
 	async def execute_command(self, shell, command, options, scope):
+
 		if command == "say":
 			scope.iter = scope.iter+1
 			return await self.execute_say(command, options, scope)
@@ -195,5 +234,8 @@ class CorePlugin(Plugin):
 		elif command == "set_command_prefix":
 			scope.iter = scope.iter+1
 			return await self.execute_set_command_prefix(command, options, scope)
+		elif command == "script":
+			scope.iter = scope.iter+1
+			return await self.execute_script_cmd(shell, command, options, scope)
 
 		return scope

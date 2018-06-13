@@ -109,16 +109,27 @@ class PraxisBot(discord.Client):
 		else:
 			return
 
-		args = command.split(" ");
+		lines = command.split("\n");
+		args = lines[0].split(" ")
 
-		scope = ExecutionScope()
-		scope.server = message.server
-		scope.channel = message.channel
-		scope.author = message.author
-		if message.author.server_permissions.administrator:
-			scope.permission = UserPermission.Admin
+		if args[0] == "help":
+			cmdlist = ["help"]
+			for p in self.plugins:
+				cmdlist = cmdlist + await p.list_commands(message.server)
+			cmdlist = sorted(cmdlist)
+			await self.ctx.send_message(message.channel, "Command list: "+", ".join(cmdlist)+".")
+			
+		else:
+			scope = ExecutionScope()
+			scope.server = message.server
+			scope.channel = message.channel
+			scope.user = message.author
+			if message.author.server_permissions.administrator:
+				scope.permission = UserPermission.Admin
 
-		await self.execute_command(args[0], " ".join(args[1:]), scope)
+			scope = await self.execute_command(args[0], command[len(args[0]):], scope)
+			if scope.deletecmd:
+				await self.ctx.client.delete_message(message)
 
 	async def on_member_join(self, member):
 		try:
