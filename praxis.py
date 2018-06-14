@@ -29,6 +29,7 @@ from scope import UserPermission
 from scope import ExecutionScope
 from plugins.core import CorePlugin
 from plugins.trigger import TriggerPlugin
+from plugins.board import BoardPlugin
 
 ########################################################################
 # Init
@@ -67,6 +68,7 @@ class PraxisBot(discord.Client):
 	def load_all_plugins(self):
 		self.load_plugin(CorePlugin)
 		self.load_plugin(TriggerPlugin)
+		self.load_plugin(BoardPlugin)
 
 	async def execute_command(self, command, options, scope):
 		if scope.level > 8:

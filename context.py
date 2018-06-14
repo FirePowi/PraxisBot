@@ -189,9 +189,9 @@ class Context:
 
 	async def send_message(self, channel, text, e=None):
 		if e:
-			await self.client.send_message(channel, text, embed=e)
+			return await self.client.send_message(channel, text, embed=e)
 		else:
-			await self.client.send_message(channel, text)
+			return await self.client.send_message(channel, text)
 
 	async def add_roles(self, member, roles):
 		try:
