@@ -73,7 +73,10 @@ class ArchivePlugin(Plugin):
 
 		args = await self.parse_options(scope.channel, parser, options)
 
-		if args and args.channel:
+		if not args:
+			return scope
+
+		if args.channel:
 			chan = self.ctx.find_channel(args.channel, scope.server)
 		else:
 			chan = scope.channel
@@ -117,7 +120,10 @@ class ArchivePlugin(Plugin):
 
 		args = await self.parse_options(scope.channel, parser, options)
 
-		if args and args.channel:
+		if not args:
+			return scope
+
+		if args.channel:
 			chan = self.ctx.find_channel(args.channel, scope.server)
 		else:
 			chan = scope.channel
