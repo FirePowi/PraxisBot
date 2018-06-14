@@ -66,6 +66,54 @@ class ArchivePlugin(Plugin):
 		fn = fn+"_"+suffix+".txt"
 		return fn
 
+	async def execute_archive_all(self, command, options, scope):
+
+		if scope.permission < UserPermission.Admin:
+			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
+			return scope
+
+		parser = argparse.ArgumentParser(description='Create a text file containing all messages.', prog=command)
+		parser.add_argument('--channel', '-c', help='Channel to archive')
+
+		args = await self.parse_options(scope.channel, parser, options)
+
+		if not args:
+			return scope
+
+		if args.channel:
+			chan = self.ctx.find_channel(args.channel, scope.server)
+		else:
+			chan = scope.channel
+
+		if chan:
+			if not chan.permissions_for(scope.user).read_messages:
+				await self.ctx.send_message(scope.channel, "You don't have read permission in this channel.")
+				return scope
+
+			messages = await self.ctx.client.pins_from(chan)
+			counter = 0
+			d = str(datetime.datetime.now())
+			textHeader = self.generate_header(chan, "Last messages before "+d)
+
+			b = datetime.datetime.now()
+			newmessages = True
+			text = ""
+			while counter < 10000 and newmessages:
+				newmessages = False
+				async for m in self.ctx.client.logs_from(chan, limit=200, before=b):
+					counter = counter+1
+					text = self.archive_message(m)+text
+					b = m
+					newmessages = True
+
+			f = io.BytesIO((textHeader+text).encode('UTF-8'))
+			await self.ctx.client.send_file(scope.channel, f, filename=self.generate_filename(chan, d), content=str(counter)+" messages archived.")
+			f.close()
+		else:
+			await self.ctx.send_message(scope.channel, "Unknown channel.")
+
+		return scope
+
 	async def execute_archive_last_day(self, command, options, scope):
 
 		parser = argparse.ArgumentParser(description='Create a text file containing all messages from the last 24h.', prog=command)
@@ -150,7 +198,7 @@ class ArchivePlugin(Plugin):
 		return scope
 
 	async def list_commands(self, server):
-		return ["archive_pins", "archive_day"]
+		return ["archive_pins", "archive_last_day"]
 
 	async def execute_command(self, shell, command, options, scope):
 		if command == "archive_pins":
@@ -159,5 +207,8 @@ class ArchivePlugin(Plugin):
 		if command == "archive_last_day":
 			scope.iter = scope.iter+1
 			return await self.execute_archive_last_day(command, options, scope)
+		if command == "archive_all":
+			scope.iter = scope.iter+1
+			return await self.execute_archive_all(command, options, scope)
 
 		return scope

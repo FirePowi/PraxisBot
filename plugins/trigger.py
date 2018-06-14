@@ -163,7 +163,7 @@ class TriggerPlugin(Plugin):
 		return scope
 
 	async def list_commands(self, server):
-		res = ["add_trigger", "delete_trigger", "show_trigger"]
+		res = ["create_trigger", "delete_trigger", "show_trigger"]
 		with self.ctx.dbcon:
 			c = self.ctx.dbcon.cursor()
 			for row in c.execute("SELECT command FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ?", [int(server.id)]):
@@ -171,9 +171,9 @@ class TriggerPlugin(Plugin):
 		return res
 
 	async def execute_command(self, shell, command, options, scope):
-		if command == "add_trigger":
+		if command == "create_trigger":
 			scope.iter = scope.iter+1
-			return await self.execute_add_trigger(command, options, scope)
+			return await self.execute_create_trigger(command, options, scope)
 		elif command == "delete_trigger":
 			scope.iter = scope.iter+1
 			return await self.execute_delete_trigger(command, options, scope)
