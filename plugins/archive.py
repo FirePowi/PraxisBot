@@ -102,7 +102,7 @@ class ArchivePlugin(Plugin):
 					timecur = m.timestamp
 					newmessages = True
 
-			f = io.StringIO(textHeader+text)
+			f = io.BytesIO((textHeader+text).encode('UTF-8'))
 			await self.ctx.client.send_file(scope.channel, f, filename=self.generate_filename(chan, d), content=str(counter)+" messages archived.")
 			f.close()
 		else:
@@ -135,7 +135,7 @@ class ArchivePlugin(Plugin):
 				counter = counter+1
 				text = self.archive_message(m)+text
 
-			f = io.StringIO(textHeader+text)
+			f = io.BytesIO((textHeader+text).encode('UTF-8'))
 			await self.ctx.client.send_file(scope.channel, f, filename=self.generate_filename(chan, "pins"), content=str(counter)+" pinned messages archived.")
 			f.close()
 		else:
