@@ -72,7 +72,7 @@ class TriggerPlugin(Plugin):
 
 
 	#Command Add Trigger
-	async def execute_add_trigger(self, command, options, scope):
+	async def execute_create_trigger(self, command, options, scope):
 		if scope.permission < UserPermission.Admin:
 			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
 			return scope
