@@ -44,6 +44,10 @@ class ArchivePlugin(Plugin):
 	def archive_message(self, m):
 		text = m.author.name+"#"+m.author.discriminator+" - "+str(m.timestamp)+" - (message: "+m.id+", author: "+m.author.id+")"
 		text = text+"\n"+m.content
+		for a in m.attachments:
+			text = text+"\nAttachment: "+str(a)
+		for e in m.embeds:
+			text = text+"\nEmbed: "+str(e)
 		text = text+"\n\n"
 		return text
 
@@ -75,6 +79,10 @@ class ArchivePlugin(Plugin):
 			chan = scope.channel
 
 		if chan:
+			if not chan.permissions_for(scope.user).read_messages:
+				await self.ctx.send_message(scope.channel, "You don't have read permission in this channel.")
+				return scope
+
 			messages = await self.ctx.client.pins_from(chan)
 			counter = 0
 			d = str(datetime.datetime.now())
@@ -95,7 +103,7 @@ class ArchivePlugin(Plugin):
 					newmessages = True
 
 			f = io.StringIO(textHeader+text)
-			await self.ctx.client.send_file(chan, f, filename=self.generate_filename(chan, d), content=str(counter)+" messages archived.")
+			await self.ctx.client.send_file(scope.channel, f, filename=self.generate_filename(chan, d), content=str(counter)+" messages archived.")
 			f.close()
 		else:
 			await self.ctx.send_message(scope.channel, "Unknown channel.")
@@ -115,6 +123,10 @@ class ArchivePlugin(Plugin):
 			chan = scope.channel
 
 		if chan:
+			if not chan.permissions_for(scope.user).read_messages:
+				await self.ctx.send_message(scope.channel, "You don't have read permission in this channel.")
+				return scope
+
 			messages = await self.ctx.client.pins_from(chan)
 			counter = 0
 			textHeader = self.generate_header(chan, "Pinned messages")
@@ -124,7 +136,7 @@ class ArchivePlugin(Plugin):
 				text = self.archive_message(m)+text
 
 			f = io.StringIO(textHeader+text)
-			await self.ctx.client.send_file(chan, f, filename=self.generate_filename(chan, "pins"), content=str(counter)+" pinned messages archived.")
+			await self.ctx.client.send_file(scope.channel, f, filename=self.generate_filename(chan, "pins"), content=str(counter)+" pinned messages archived.")
 			f.close()
 		else:
 			await self.ctx.send_message(scope.channel, "Unknown channel.")
