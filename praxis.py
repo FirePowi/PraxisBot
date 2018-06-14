@@ -78,8 +78,10 @@ class PraxisBot(discord.Client):
 				if scope.iter != newScope.iter:
 					return s
 
-		except:
+		except Exception as exception:
 			print(traceback.format_exc())
+			await self.ctx.send_message(scope.channel, "The following command failed ("+type(exception).__name__+"):\n`"+command+options+"`")
+			scope.abort = True
 			pass
 
 		return scope
@@ -118,7 +120,7 @@ class PraxisBot(discord.Client):
 				cmdlist = cmdlist + await p.list_commands(message.server)
 			cmdlist = sorted(cmdlist)
 			await self.ctx.send_message(message.channel, "Command list: "+", ".join(cmdlist)+".")
-			
+
 		else:
 			scope = ExecutionScope()
 			scope.server = message.server

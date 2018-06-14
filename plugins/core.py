@@ -100,82 +100,122 @@ class CorePlugin(Plugin):
 		return scope
 
 	async def execute_if(self, command, options, scope):
-		parser = argparse.ArgumentParser(description='Perform tests. Don\'t forget to add a endif line.', prog=command)
-		parser.add_argument('a', help='Value A')
-		parser.add_argument('b', help='Value B')
-		parser.add_argument('--equal', action='store_true', help='Test if A = B')
-		parser.add_argument('--hasrole', action='store_true', help='Test if the user A has the role B')
-		parser.add_argument('--inverse', action='store_true', help='Inverse the result of the test')
-		parser.add_argument('--exit', action='store_true', help='Abort execution if not true')
+		parser = argparse.ArgumentParser(description='Perform tests. Don\'t forget to add an endif line.', prog=command)
+		parser.add_argument('firstvar', help='First values', metavar='VALUE')
+		parser.add_argument('--equal', help='Test if A = B', metavar='VALUE')
+		parser.add_argument('--hasroles', nargs='+', help='Test if a member has one of the listed roles', metavar='ROLE')
+		parser.add_argument('--ismember', action='store_true', help='Test if a parameter is a valid member')
+		parser.add_argument('--not', dest='inverse', action='store_true', help='Inverse the result of the test')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
 		if args:
-			a = self.ctx.format_text(args.a, scope)
-			b = self.ctx.format_text(args.b, scope)
-			
 			res = False
 			if args.equal:
+				a = self.ctx.format_text(args.firstvar, scope)
+				b = self.ctx.format_text(args.equal, scope)
 				res = (a == b)
-			elif args.hasrole:
-				u = self.ctx.find_member(a, scope.server)
-				r = self.ctx.find_role(b, scope.server)
-				if r and u:
+			elif args.ismember:
+				u = self.ctx.find_member(self.ctx.format_text(args.firstvar, scope), scope.server)
+				res = (u != None)
+			elif args.hasroles:
+				u = self.ctx.find_member(self.ctx.format_text(args.firstvar, scope), scope.server)
+				r = []
+				for i in args.hasroles:
+					formatedRole = self.ctx.format_text(i, scope)
+					role = self.ctx.find_role(formatedRole, scope.server)
+					if role:
+						r.append(role)
+				if u:
 					for i in u.roles:
-						if i.id == r.id:
-							res = True
+						for j in r:
+							if i.id == j.id:
+								res = True
+								break
+						if res:
 							break
+
 			if args.inverse:
 				res = not res
 
 			newScope = scope
-			if args.exit and not res:
-				newScope.abort = True
-			else:
-				newScope.blocks.append(ExecutionBlock("endif", res))
+			newScope.blocks.append(ExecutionBlock("endif", res))
 			return newScope
 
 		return scope
 
-	async def execute_add_role(self, command, options, scope):
+	async def execute_add_roles(self, command, options, scope):
 		if scope.permission < UserPermission.Script:
 			return scope
 
-		parser = argparse.ArgumentParser(description='Add a role to an user.', prog=command)
+		parser = argparse.ArgumentParser(description='Add roles to a member.', prog=command)
 		parser.add_argument('user', help='User name')
-		parser.add_argument('role', help='Role name')
-		parser.add_argument('--silent', '-s', action='store_true',  help='Don\'t print errors')
+		parser.add_argument('roles', nargs='+', help='A list of roles')
+		parser.add_argument('--silent', '-s', action='store_true',  help='Don\'t print messages')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
 		if args:
-			u = self.ctx.format_text(args.user, scope)
-			r = self.ctx.format_text(args.role, scope)
-			if await self.ctx.add_role(scope.server, u, r):
+			formatedUser = self.ctx.format_text(args.user, scope)
+			u = self.ctx.find_member(formatedUser, scope.server)
+			if not u:
 				return scope
-			elif not args.silent:
-				await self.ctx.send_message(scope.channel, "Can't add role `"+r+"` to `"+u+"`.")
+
+			r = []
+			for a in args.roles:
+				formatedRole = self.ctx.format_text(a, scope)
+				role = self.ctx.find_role(formatedRole, scope.server)
+				if role:
+					r.append(role)
+
+			res = await self.ctx.add_roles(u, r)
+			if not args.silent:
+				if res:
+					output = "The following roles has been added to "+u.display_name+":"
+					for i in r:
+						output = output + "\n :white_check_mark: " + i.name
+					await self.ctx.send_message(scope.channel, output)
+				else:
+					output = "The following roles has not been added to "+u.display_name+":"
+					for i in r:
+						output = output + "\n :x: " + r.name
+					await self.ctx.send_message(scope.channel, output)
 
 		return scope
 
-	async def execute_remove_role(self, command, options, scope):
+	async def execute_remove_roles(self, command, options, scope):
 		if scope.permission < UserPermission.Script:
 			return scope
 
-		parser = argparse.ArgumentParser(description='Remove a role to an user.', prog=command)
+		parser = argparse.ArgumentParser(description='Remove roles to a member.', prog=command)
 		parser.add_argument('user', help='User name')
-		parser.add_argument('role', help='Role name')
-		parser.add_argument('--silent', '-s', action='store_true',  help='Don\'t print errors')
+		parser.add_argument('roles', nargs='+', help='A list of roles')
+		parser.add_argument('--silent', '-s', action='store_true',  help='Don\'t print messages')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
 		if args:
-			u = self.ctx.format_text(args.user, scope)
-			r = self.ctx.format_text(args.role, scope)
-			if await self.ctx.remove_role(scope.server, u, r):
-				return scope
-			elif not args.silent:
-				await self.ctx.send_message(scope.channel, "Can't remove role `"+r+"` to `"+u+"`.")
+			formatedUser = self.ctx.format_text(args.user, scope)
+			u = self.ctx.find_member(formatedUser, scope.server)
+			r = []
+			for a in args.roles:
+				formatedRole = self.ctx.format_text(a, scope)
+				role = self.ctx.find_role(formatedRole, scope.server)
+				if role:
+					r.append(role)
+
+			res = await self.ctx.remove_roles(u, r)
+			if not args.silent:
+				if res:
+					output = "The following roles has been removed from "+u.display_name+":"
+					for i in r:
+						output = output + "\n :white_check_mark: " + i.name
+					await self.ctx.send_message(scope.channel, output)
+				else:
+					output = "The following roles has not been removed from "+u.display_name+":"
+					for i in r:
+						output = output + "\n :x: " + r.name
+					await self.ctx.send_message(scope.channel, output)
 
 		return scope
 
@@ -216,8 +256,14 @@ class CorePlugin(Plugin):
 
 		return scope
 
+	async def execute_exit(self, shell, command, options, scope):
+
+		newScope = scope
+		newScope.abort = True
+		return newScope
+
 	async def list_commands(self, server):
-		return ["say", "if", "set_variable", "add_role", "remove_role", "set_command_prefix", "script"]
+		return ["say", "if", "set_variable", "add_roles", "remove_roles", "set_command_prefix", "script", "exit"]
 
 	async def execute_command(self, shell, command, options, scope):
 
@@ -230,17 +276,20 @@ class CorePlugin(Plugin):
 		elif command == "set_variable":
 			scope.iter = scope.iter+1
 			return await self.execute_set_variable(command, options, scope)
-		elif command == "add_role":
+		elif command == "add_roles":
 			scope.iter = scope.iter+1
-			return await self.execute_add_role(command, options, scope)
-		elif command == "remove_role":
+			return await self.execute_add_roles(command, options, scope)
+		elif command == "remove_roles":
 			scope.iter = scope.iter+1
-			return await self.execute_remove_role(command, options, scope)
+			return await self.execute_remove_roles(command, options, scope)
 		elif command == "set_command_prefix":
 			scope.iter = scope.iter+1
 			return await self.execute_set_command_prefix(command, options, scope)
 		elif command == "script":
 			scope.iter = scope.iter+1
 			return await self.execute_script_cmd(shell, command, options, scope)
+		elif command == "exit":
+			scope.iter = scope.iter+1
+			return await self.execute_exit(shell, command, options, scope)
 
 		return scope

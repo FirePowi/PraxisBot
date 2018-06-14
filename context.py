@@ -43,7 +43,7 @@ class Context:
 	def format_text(self, text, scope):
 		if not text:
 			return ""
-		
+
 		user = scope.user
 		channel = scope.channel
 		server = scope.server
@@ -68,13 +68,19 @@ class Context:
 			u = user
 			user_chk = re.fullmatch('([*@#t]?user(?:_time|_avatar))=(.*)', tag)
 			if user_chk:
-				u = self.find_member(user_chk.group(2).strip(), server)
+				subUser = user_chk.group(2).strip()
+				if subUser in scope.vars:
+					subUser = scope.vars[subUser]
+				u = self.find_member(subUser, server)
 				tag = user_chk.group(1)
 
 			c = channel
 			channel_chk = re.fullmatch('([#]?channel)=(.*)', tag)
 			if channel_chk:
-				c = self.find_channel(channel_chk.group(2).strip(), server)
+				subChan = user_chk.group(2).strip()
+				if subChan in scope.vars:
+					subChan = scope.vars[subUser]
+				c = self.find_channel(subChan, server)
 				tag = channel_chk.group(1)
 
 			if tag.lower() == "server" and server:
@@ -183,18 +189,18 @@ class Context:
 		else:
 			await self.client.send_message(channel, text)
 
-	async def add_role(self, server, member_name, role_name):
-		m = self.find_member(member_name, server)
-		r = self.find_role(role_name, server)
-		if r and m:
-			await self.client.add_roles(m, r)
-			return True
-		return False
+	async def add_roles(self, member, roles):
+		try:
+			await self.client.add_roles(member, *roles)
+		except:
+			pass
+			return False
+		return True
 
-	async def remove_role(self, server, member_name, role_name):
-		m = self.find_member(member_name, server)
-		r = self.find_role(role_name, server)
-		if r and m:
-			await self.client.remove_roles(m, r)
-			return True
-		return False
+	async def remove_roles(self, member, roles):
+		try:
+			await self.client.remove_roles(member, *roles)
+		except:
+			pass
+			return False
+		return True
