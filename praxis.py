@@ -163,7 +163,7 @@ class PraxisBot(discord.Client):
 			print(traceback.format_exc())
 			pass
 
-	async def on_ban(self, member):
+	async def on_member_ban(self, member):
 		try:
 			scope = ExecutionScope()
 			scope.server = member.server
@@ -178,12 +178,12 @@ class PraxisBot(discord.Client):
 			print(traceback.format_exc())
 			pass
 
-	async def on_unban(self, server, user):
+	async def on_member_unban(self, server, user):
 		try:
 			scope = ExecutionScope()
-			scope.server = member.server
-			scope.channel = self.ctx.get_default_channel(member.server)
-			scope.user = member
+			scope.server = server
+			scope.channel = self.ctx.get_default_channel(server)
+			scope.user = user
 			scope.permission = UserPermission.Script
 
 			for p in self.plugins:

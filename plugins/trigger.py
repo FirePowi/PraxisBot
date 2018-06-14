@@ -197,6 +197,6 @@ class TriggerPlugin(Plugin):
 		await self.execute_trigger_script(shell, "@ban", "", scope)
 		return True
 
-	async def on_unban(self, shell, server, scope):
+	async def on_unban(self, shell, scope):
 		await self.execute_trigger_script(shell, "@unban", "", scope)
 		return True

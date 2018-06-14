@@ -73,7 +73,6 @@ class Context:
 					subUser = scope.vars[subUser]
 				u = self.find_member(subUser, server)
 				tag = user_chk.group(1)
-				print(subUser)
 
 			c = channel
 			channel_chk = re.fullmatch('([#]?channel)=(.*)', tag)
