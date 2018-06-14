@@ -208,3 +208,20 @@ class Context:
 			pass
 			return False
 		return True
+
+	async def change_roles(self, member, rolesToAdd, rolesToRemove):
+
+		roles = member.roles
+		rolesAdded = []
+		rolesRemoved = []
+		for r in rolesToRemove:
+			if r in roles:
+				roles.remove(r)
+				rolesRemoved.append(r)
+		for r in rolesToAdd:
+			if not r in roles:
+				roles.append(r)
+				rolesAdded.append(r)
+
+		await self.client.replace_roles(member, *roles)
+		return (rolesAdded, rolesRemoved)

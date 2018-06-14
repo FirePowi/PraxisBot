@@ -144,52 +144,14 @@ class CorePlugin(Plugin):
 
 		return scope
 
-	async def execute_add_roles(self, command, options, scope):
-		if scope.permission < UserPermission.Script:
-			return scope
-
-		parser = argparse.ArgumentParser(description='Add roles to a member.', prog=command)
-		parser.add_argument('user', help='User name')
-		parser.add_argument('roles', nargs='+', help='A list of roles')
-		parser.add_argument('--silent', '-s', action='store_true',  help='Don\'t print messages')
-
-		args = await self.parse_options(scope.channel, parser, options)
-
-		if args:
-			formatedUser = self.ctx.format_text(args.user, scope)
-			u = self.ctx.find_member(formatedUser, scope.server)
-			if not u:
-				return scope
-
-			r = []
-			for a in args.roles:
-				formatedRole = self.ctx.format_text(a, scope)
-				role = self.ctx.find_role(formatedRole, scope.server)
-				if role:
-					r.append(role)
-
-			res = await self.ctx.add_roles(u, r)
-			if not args.silent:
-				if res:
-					output = "The following roles has been added to "+u.display_name+":"
-					for i in r:
-						output = output + "\n :white_check_mark: " + i.name
-					await self.ctx.send_message(scope.channel, output)
-				else:
-					output = "The following roles has not been added to "+u.display_name+":"
-					for i in r:
-						output = output + "\n :x: " + r.name
-					await self.ctx.send_message(scope.channel, output)
-
-		return scope
-
-	async def execute_remove_roles(self, command, options, scope):
+	async def execute_change_roles(self, command, options, scope):
 		if scope.permission < UserPermission.Script:
 			return scope
 
 		parser = argparse.ArgumentParser(description='Remove roles to a member.', prog=command)
 		parser.add_argument('user', help='User name')
-		parser.add_argument('roles', nargs='+', help='A list of roles')
+		parser.add_argument('--add', nargs='*', help='A list of roles to add', default=[])
+		parser.add_argument('--remove', nargs='*', help='A list of roles to remove', default=[])
 		parser.add_argument('--silent', '-s', action='store_true',  help='Don\'t print messages')
 
 		args = await self.parse_options(scope.channel, parser, options)
@@ -197,25 +159,30 @@ class CorePlugin(Plugin):
 		if args:
 			formatedUser = self.ctx.format_text(args.user, scope)
 			u = self.ctx.find_member(formatedUser, scope.server)
-			r = []
-			for a in args.roles:
+			rolesToAdd = []
+			rolesToRemove = []
+			for a in args.add:
 				formatedRole = self.ctx.format_text(a, scope)
 				role = self.ctx.find_role(formatedRole, scope.server)
 				if role:
-					r.append(role)
+					rolesToAdd.append(role)
+			for a in args.remove:
+				formatedRole = self.ctx.format_text(a, scope)
+				role = self.ctx.find_role(formatedRole, scope.server)
+				if role:
+					rolesToRemove.append(role)
 
-			res = await self.ctx.remove_roles(u, r)
+			res = await self.ctx.change_roles(u, rolesToAdd, rolesToRemove)
 			if not args.silent:
 				if res:
-					output = "The following roles has been removed from "+u.display_name+":"
-					for i in r:
-						output = output + "\n :white_check_mark: " + i.name
+					output = "The following roles has been changed from "+u.display_name+":"
+					for i in res[0]:
+						output = output + "\n + " + i.name
+					for i in res[1]:
+						output = output + "\n - " + i.name
 					await self.ctx.send_message(scope.channel, output)
 				else:
-					output = "The following roles has not been removed from "+u.display_name+":"
-					for i in r:
-						output = output + "\n :x: " + r.name
-					await self.ctx.send_message(scope.channel, output)
+					await self.ctx.send_message(scope.channel, "Roles can't be changed")
 
 		return scope
 
@@ -276,7 +243,7 @@ class CorePlugin(Plugin):
 		return newScope
 
 	async def list_commands(self, server):
-		return ["say", "if", "set_variable", "add_roles", "remove_roles", "set_command_prefix", "script", "exit", "for_members"]
+		return ["say", "if", "set_variable", "change_roles", "set_command_prefix", "script", "exit", "for_members"]
 
 	async def execute_command(self, shell, command, options, scope):
 
@@ -289,12 +256,9 @@ class CorePlugin(Plugin):
 		elif command == "set_variable":
 			scope.iter = scope.iter+1
 			return await self.execute_set_variable(command, options, scope)
-		elif command == "add_roles":
+		elif command == "change_roles":
 			scope.iter = scope.iter+1
-			return await self.execute_add_roles(command, options, scope)
-		elif command == "remove_roles":
-			scope.iter = scope.iter+1
-			return await self.execute_remove_roles(command, options, scope)
+			return await self.execute_change_roles(command, options, scope)
 		elif command == "set_command_prefix":
 			scope.iter = scope.iter+1
 			return await self.execute_set_command_prefix(command, options, scope)

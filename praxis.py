@@ -31,6 +31,7 @@ from plugins.core import CorePlugin
 from plugins.trigger import TriggerPlugin
 from plugins.board import BoardPlugin
 from plugins.archive import ArchivePlugin
+from plugins.moderation import ModerationPlugin
 
 ########################################################################
 # Init
@@ -71,6 +72,7 @@ class PraxisBot(discord.Client):
 		self.load_plugin(TriggerPlugin)
 		self.load_plugin(BoardPlugin)
 		self.load_plugin(ArchivePlugin)
+		self.load_plugin(ModerationPlugin)
 
 	async def execute_command(self, command, options, scope):
 		if scope.level > 8:
