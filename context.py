@@ -66,18 +66,19 @@ class Context:
 				tagOutput = tag
 
 			u = user
-			user_chk = re.fullmatch('([*@#t]?user(?:_time|_avatar))=(.*)', tag)
+			user_chk = re.fullmatch('([*@#]?user(?:_time|_avatar)?)=(.*)', tag)
 			if user_chk:
 				subUser = user_chk.group(2).strip()
 				if subUser in scope.vars:
 					subUser = scope.vars[subUser]
 				u = self.find_member(subUser, server)
 				tag = user_chk.group(1)
+				print(subUser)
 
 			c = channel
 			channel_chk = re.fullmatch('([#]?channel)=(.*)', tag)
 			if channel_chk:
-				subChan = user_chk.group(2).strip()
+				subChan = channel_chk.group(2).strip()
 				if subChan in scope.vars:
 					subChan = scope.vars[subUser]
 				c = self.find_channel(subChan, server)
@@ -115,6 +116,8 @@ class Context:
 		if not chan_name:
 			return None
 
+		chan_name = chan_name.strip()
+
 		for c in server.channels:
 			if c.name == chan_name:
 				return c
@@ -129,6 +132,8 @@ class Context:
 	def find_member(self, member_name, server):
 		if not member_name:
 			return None
+
+		member_name = member_name.strip()
 
 		for m in server.members:
 			if "<@"+m.id+">" == member_name:
