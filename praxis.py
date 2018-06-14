@@ -30,6 +30,7 @@ from scope import ExecutionScope
 from plugins.core import CorePlugin
 from plugins.trigger import TriggerPlugin
 from plugins.board import BoardPlugin
+from plugins.archive import ArchivePlugin
 
 ########################################################################
 # Init
@@ -69,6 +70,7 @@ class PraxisBot(discord.Client):
 		self.load_plugin(CorePlugin)
 		self.load_plugin(TriggerPlugin)
 		self.load_plugin(BoardPlugin)
+		self.load_plugin(ArchivePlugin)
 
 	async def execute_command(self, command, options, scope):
 		if scope.level > 8:
@@ -128,7 +130,9 @@ class PraxisBot(discord.Client):
 			scope.server = message.server
 			scope.channel = message.channel
 			scope.user = message.author
-			if message.author.server_permissions.administrator:
+			if message.author.id == message.server.owner.id:
+				scope.permission = UserPermission.Owner
+			elif message.author.server_permissions.administrator:
 				scope.permission = UserPermission.Admin
 
 			scope = await self.execute_command(args[0], command[len(args[0]):], scope)

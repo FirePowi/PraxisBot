@@ -243,18 +243,31 @@ class CorePlugin(Plugin):
 			options = script[0]
 			script = script[1:]
 
-		parser = argparse.ArgumentParser(description='Execute all commands after the first line.', prog=command)
+		if len(script) == 0:
+			await self.ctx.send_message(scope.channel, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\nscript\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
+			return scope
 
-		args = await self.parse_options(scope.channel, parser, options)
+		return await self.execute_script(shell, script, scope)
 
-		if args:
-			if len(script) == 0:
-				await self.ctx.send_message(scope.channel, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\nscript\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
-				return scope
+	async def execute_for_members(self, shell, command, options, scope):
 
-			return await self.execute_script(shell, script, scope)
+		if scope.permission < UserPermission.Owner:
+			await self.ctx.send_message(scope.channel, "Only server owner can run this command.")
+			return scope
 
-		return scope
+		subScope = scope
+		for m in scope.server.members:
+			if not m.bot:
+				subScope.vars["iter"] = m.mention
+				subScope.level = subScope.level+1
+				c = options.strip().split(" ")
+				o = c[1:]
+				c = c[0]
+				subScope = await shell.execute_command(c, " ".join(o).replace("{{iter}}", m.mention), subScope)
+
+		newScope = subScope
+		newScope.level = newScope.level-1
+		return newScope
 
 	async def execute_exit(self, shell, command, options, scope):
 
@@ -263,7 +276,7 @@ class CorePlugin(Plugin):
 		return newScope
 
 	async def list_commands(self, server):
-		return ["say", "if", "set_variable", "add_roles", "remove_roles", "set_command_prefix", "script", "exit"]
+		return ["say", "if", "set_variable", "add_roles", "remove_roles", "set_command_prefix", "script", "exit", "for_members"]
 
 	async def execute_command(self, shell, command, options, scope):
 
@@ -291,5 +304,8 @@ class CorePlugin(Plugin):
 		elif command == "exit":
 			scope.iter = scope.iter+1
 			return await self.execute_exit(shell, command, options, scope)
+		elif command == "for_members":
+			scope.iter = scope.iter+1
+			return await self.execute_for_members(shell, command, options, scope)
 
 		return scope

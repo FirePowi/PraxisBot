@@ -22,6 +22,7 @@ class UserPermission:
 	Member=0
 	Script=1
 	Admin=2
+	Owner=3
 
 class ExecutionBlock:
 	def __init__(self, endname, e):
