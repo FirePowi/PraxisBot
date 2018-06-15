@@ -137,6 +137,8 @@ class Context:
 		for m in server.members:
 			if "<@"+m.id+">" == member_name:
 				return m
+			if "<@!"+m.id+">" == member_name:
+				return m
 			elif m.name+"#"+m.discriminator == member_name:
 				return m
 			elif m.id == member_name:

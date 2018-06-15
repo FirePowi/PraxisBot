@@ -101,6 +101,16 @@ class PraxisBot(discord.Client):
 
 		self.load_all_plugins()
 
+	def add_global_variables_in_scope(self, scope):
+		newScope = scope
+
+		with self.ctx.dbcon:
+			c = self.ctx.dbcon.cursor()
+			for row in c.execute("SELECT name, value FROM "+self.ctx.dbprefix+"variables WHERE discord_sid = ?", [int(scope.server.id)]):
+				newScope.vars[row[0]] = row[1]
+
+		return newScope
+
 	async def on_message(self, message):
 		if not self.ctx:
 			return
@@ -139,6 +149,8 @@ class PraxisBot(discord.Client):
 			elif message.author.server_permissions.administrator:
 				scope.permission = UserPermission.Admin
 
+			scope = self.add_global_variables_in_scope(scope)
+
 			scope = await self.execute_command(args[0], command[len(args[0]):], scope)
 			if scope.deletecmd:
 				await self.ctx.client.delete_message(message)
@@ -150,6 +162,7 @@ class PraxisBot(discord.Client):
 			scope.channel = self.ctx.get_default_channel(member.server)
 			scope.user = member
 			scope.permission = UserPermission.Script
+			scope = self.add_global_variables_in_scope(scope)
 
 			for p in self.plugins:
 				await p.on_member_join(self, scope)
@@ -165,6 +178,7 @@ class PraxisBot(discord.Client):
 			scope.channel = self.ctx.get_default_channel(member.server)
 			scope.user = member
 			scope.permission = UserPermission.Script
+			scope = self.add_global_variables_in_scope(scope)
 
 			for p in self.plugins:
 				await p.on_member_leave(self, scope)
@@ -180,6 +194,7 @@ class PraxisBot(discord.Client):
 			scope.channel = self.ctx.get_default_channel(member.server)
 			scope.user = member
 			scope.permission = UserPermission.Script
+			scope = self.add_global_variables_in_scope(scope)
 
 			for p in self.plugins:
 				await p.on_ban(self, scope)
@@ -195,6 +210,7 @@ class PraxisBot(discord.Client):
 			scope.channel = self.ctx.get_default_channel(server)
 			scope.user = user
 			scope.permission = UserPermission.Script
+			scope = self.add_global_variables_in_scope(scope)
 
 			for p in self.plugins:
 				await p.on_unban(self, scope)

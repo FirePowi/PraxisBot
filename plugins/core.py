@@ -38,6 +38,8 @@ class CorePlugin(Plugin):
 	def __init__(self, ctx):
 		super().__init__(ctx)
 
+		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"variables(id INTEGER PRIMARY KEY, discord_sid INTEGER, name TEXT, value TEXT)");
+
 	async def execute_say(self, command, options, scope):
 		parser = argparse.ArgumentParser(description='Send a message.', prog=command)
 		parser.add_argument('message', help='Text to send')
@@ -82,6 +84,7 @@ class CorePlugin(Plugin):
 		parser = argparse.ArgumentParser(description='Set a variable.', prog=command)
 		parser.add_argument('name', help='Variable name')
 		parser.add_argument('value', help='Variable value')
+		parser.add_argument('--global', dest='glob', action='store_true', help='Set the variable for all commands on this server')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
@@ -96,6 +99,16 @@ class CorePlugin(Plugin):
 				return scope
 
 			scope.vars[var] = val
+
+			if args.glob:
+				with self.ctx.dbcon:
+					c = self.ctx.dbcon.cursor()
+					c.execute("SELECT id FROM "+self.ctx.dbprefix+"variables WHERE discord_sid = ? AND name = ?", [int(scope.server.id), str(var)])
+					r = c.fetchone()
+					if r:
+						c.execute("UPDATE "+self.ctx.dbprefix+"variables SET value = ? WHERE id = ?", [str(val), int(r[0])])
+					else:
+						c.execute("INSERT INTO "+self.ctx.dbprefix+"variables (discord_sid, name, value) VALUES(?, ?, ?)", [int(scope.server.id), str(var), str(val)])
 
 		return scope
 
@@ -159,6 +172,10 @@ class CorePlugin(Plugin):
 		if args:
 			formatedUser = self.ctx.format_text(args.user, scope)
 			u = self.ctx.find_member(formatedUser, scope.server)
+			if not u:
+				await self.ctx.send_message(scope.channel, "Member `"+formatedUser+"` not found.")
+				return
+
 			rolesToAdd = []
 			rolesToRemove = []
 			for a in args.add:
@@ -230,7 +247,7 @@ class CorePlugin(Plugin):
 				c = options.strip().split(" ")
 				o = c[1:]
 				c = c[0]
-				subScope = await shell.execute_command(c, " ".join(o).replace("{{iter}}", m.mention), subScope)
+				subScope = await shell.execute_command(c, " ".join(o).replace("{{iter}}", m.name+"#"+m.discriminator), subScope)
 
 		newScope = subScope
 		newScope.level = newScope.level-1
