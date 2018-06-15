@@ -65,18 +65,35 @@ class ModerationPlugin(Plugin):
 			if not user:
 				user = scopre.user
 
-		text = ""
+		clist = []
 		for c in scope.server.channels:
 			if c.permissions_for(scope.user).read_messages and c.permissions_for(user).read_messages:
 				if c.type == discord.ChannelType.text:
+					pos = (c.position+1)*10
+					cat = c.server.get_channel(c.parent_id)
+					if cat:
+						pos = pos+1000*(cat.position+1)
+
 					if c.permissions_for(user).send_messages:
-						text = text+" :pencil2: "+c.name+"\n"
+						clist.append((pos, " :pencil2: "+c.name))
 					else:
-						text = text+" :eye: "+c.name+"\n"
+						clist.append((pos, " :eye: "+c.name))
 				elif c.type == discord.ChannelType.voice:
-					text = text+" :microphone2: "+c.name+"\n"
-				else:
-					text = text+"\n**"+c.name+"**\n"
+					pos = (c.position+1)*10
+					cat = c.server.get_channel(c.parent_id)
+					if cat:
+						pos = pos+1000*(cat.position+1)
+
+					clist.append((pos, " :microphone2: "+c.name))
+				elif c.type == discord.ChannelType.category:
+					pos = (c.position+1)*1000
+					clist.append((pos, "\n**"+c.name+"**"))
+
+		clist = sorted(clist, key=lambda x: x[0])
+
+		text = ""
+		for c in clist:
+			text = text+c[1]+"\n"
 
 		await self.ctx.send_message(scope.channel, text)
 
