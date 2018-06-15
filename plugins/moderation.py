@@ -48,6 +48,40 @@ class ModerationPlugin(Plugin):
 
 		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"mod_levels(id INTEGER PRIMARY KEY, discord_sid INTEGER, name TEXT, priority INTEGER, type INTEGER, value TEXT, ban_cooldown INTEGER)");
 
+
+	async def execute_list_channels(self, command, options, scope):
+		parser = argparse.ArgumentParser(description='List all channels of the server.', prog=command)
+		parser.add_argument('--user', help='List channels from the point of view of this user.')
+
+		args = await self.parse_options(scope.channel, parser, options)
+
+		if not args:
+			return scope
+
+		if not args.user:
+			user = scope.user
+		else:
+			user = self.ctx.find_member(args.user, scope.server)
+			if not user:
+				user = scopre.user
+
+		text = ""
+		for c in scope.server.channels:
+			if c.permissions_for(scope.user).read_messages and c.permissions_for(user).read_messages:
+				if c.type == discord.ChannelType.text:
+					if c.permissions_for(user).send_messages:
+						text = text+" :pencil2: "+c.name+"\n"
+					else:
+						text = text+" :eye: "+c.name+"\n"
+				elif c.type == discord.ChannelType.voice:
+					text = text+" :microphone2: "+c.name+"\n"
+				else:
+					text = text+"\n**"+c.name+"**\n"
+
+		await self.ctx.send_message(scope.channel, text)
+
+		return scope
+
 	async def execute_create_mod_level(self, command, options, scope):
 		if scope.permission < UserPermission.Admin:
 			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
@@ -219,12 +253,15 @@ class ModerationPlugin(Plugin):
 		return scope
 
 	async def list_commands(self, server):
-		return ["create_mod_level", "delete_mod_level", "mod_levels", "get_mod_level"]
+		return ["list_channels", "create_mod_level", "delete_mod_level", "mod_levels", "get_mod_level"]
 
 	async def execute_command(self, shell, command, options, scope):
 		#if command == "ban":
 		#	scope.iter = scope.iter+1
 		#	return await self.execute_ban(command, options, scope)
+		if command == "list_channels":
+			scope.iter = scope.iter+1
+			return await self.execute_list_channels(command, options, scope)
 		if command == "create_mod_level":
 			scope.iter = scope.iter+1
 			return await self.execute_create_mod_level(command, options, scope)
