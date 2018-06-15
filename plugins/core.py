@@ -100,7 +100,7 @@ class CorePlugin(Plugin):
 
 			scope.vars[var] = val
 
-			if args.glob:
+			if args.glob and scope.permission >= UserPermission.Script:
 				with self.ctx.dbcon:
 					c = self.ctx.dbcon.cursor()
 					c.execute("SELECT id FROM "+self.ctx.dbprefix+"variables WHERE discord_sid = ? AND name = ?", [int(scope.server.id), str(var)])
