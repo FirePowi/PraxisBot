@@ -66,7 +66,7 @@ class TriggerPlugin(Plugin):
 			script = script.split("\n");
 			subScope = scope
 			subScope.deletecmd = autodelete
-			subScope.vars["params"] = param
+			subScope.vars["params"] = param.strip()
 			return await self.execute_script(shell, script, subScope)
 		return scope
 
