@@ -71,7 +71,9 @@ class ModerationPlugin(Plugin):
 				if not row[4] or row[4] < 0:
 					res["ban_timelimit"] = 0
 				if not row[5] or row[5] < 0:
-					res["ban_prioritylimit"] = res["priority"]-1
+					res["ban_prioritylimit"] = 0
+				if row[5] > res["priority"]:
+					res["ban_prioritylimit"] = res["priority"]
 
 				if row[0] == ModLevelType.User:
 					if row[1] == member.id:
@@ -253,7 +255,7 @@ class ModerationPlugin(Plugin):
 				if not row[3] or row[3] < 0:
 					plimit = row[1]-1
 				else:
-					plimit = Math.max(row[3], row[1])
+					plimit = min(row[3], row[1])
 				text = text+"\n   - Maximum priority that can be banned: "+str(plimit)
 
 		await self.ctx.send_message(scope.channel, text)
@@ -355,7 +357,7 @@ class ModerationPlugin(Plugin):
 					else:
 						await self.ctx.send_message(scope.channel, "Can't update time limitation for the level `"+args.name+"`.")
 				if args.prioritylimit:
-					if not self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"mod_levels SET ban_prioritylimit = ? WHERE id = ?", [int(args.prioritylimit), int(r[0])]):
+					if self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"mod_levels SET ban_prioritylimit = ? WHERE id = ?", [int(args.prioritylimit), int(r[0])]):
 						await self.ctx.send_message(scope.channel, "Priority limitation for the level `"+args.name+"` updated to: "+args.prioritylimit+".")
 					else:
 						await self.ctx.send_message(scope.channel, "Can't update priority limitation for the level `"+args.name+"`.")
