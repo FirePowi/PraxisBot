@@ -46,8 +46,51 @@ class ModerationPlugin(Plugin):
 	def __init__(self, ctx):
 		super().__init__(ctx)
 
-		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"mod_levels(id INTEGER PRIMARY KEY, discord_sid INTEGER, name TEXT, priority INTEGER, type INTEGER, value TEXT, ban_cooldown INTEGER)");
+		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"mod_levels(id INTEGER PRIMARY KEY, discord_sid INTEGER, name TEXT, priority INTEGER, type INTEGER, value TEXT, ban_timelimit INTEGER, ban_prioritylimit INTEGER)");
+		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"ban_time(id INTEGER PRIMARY KEY, discord_sid INTEGER, discord_uid INTEGER, last_time DATETIME)");
 
+	def get_mod_level(self, member):
+		if not member:
+			return {
+				"name":"",
+				"priority":-1,
+				"ban_timelimit":0,
+				"ban_prioritylimit":-1
+			}
+
+		with self.ctx.dbcon:
+			c = self.ctx.dbcon.cursor()
+			for row in c.execute("SELECT type, value, name, priority, ban_timelimit, ban_prioritylimit FROM "+self.ctx.dbprefix+"mod_levels WHERE discord_sid = ? ORDER BY priority DESC", [int(member.server.id)]):
+				res = {
+					"name":row[2],
+					"priority":row[3],
+					"ban_timelimit":row[4],
+					"ban_prioritylimit":row[5]
+				}
+
+				if not row[4] or row[4] < 0:
+					res["ban_timelimit"] = 0
+				if not row[5] or row[5] < 0:
+					res["ban_prioritylimit"] = res["priority"]-1
+
+				if row[0] == ModLevelType.User:
+					if row[1] == member.id:
+						return res
+				if row[0] == ModLevelType.Role:
+					for r in member.roles:
+						if r.id == row[1]:
+							return res
+				if row[0] == ModLevelType.Channel:
+					chan = self.ctx.find_channel("<#"+row[1]+">", member.server)
+					if chan and chan.permissions_for(member).send_messages:
+						return res
+
+		return {
+			"name":"",
+			"priority": 0,
+			"ban_timelimit": 0,
+			"ban_prioritylimit": -1
+		}
 
 	async def execute_list_channels(self, command, options, scope):
 		parser = argparse.ArgumentParser(description='List all channels of the server.', prog=command)
@@ -143,7 +186,7 @@ class ModerationPlugin(Plugin):
 				return scope
 
 			with self.ctx.dbcon:
-				if not self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"mod_levels (name, discord_sid, type, value, priority) VALUES (?, ?, ?, ?, ?)", [str(args.name), int(scope.server.id), ModLevelType.Channel, int(chan.id), int(args.priority)]):
+				if not self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"mod_levels (name, discord_sid, type, value, priority, ban_timelimit, ban_prioritylimit) VALUES (?, ?, ?, ?, ?, ?, ?)", [str(args.name), int(scope.server.id), ModLevelType.Channel, int(chan.id), int(args.priority), 0, -1]):
 					await self.ctx.send_message(scope.channel, "The moderator level can't be created.")
 
 		elif args.role:
@@ -153,7 +196,7 @@ class ModerationPlugin(Plugin):
 				return scope
 
 			with self.ctx.dbcon:
-				if not self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"mod_levels (name, discord_sid, type, value, priority) VALUES (?, ?, ?, ?, ?)", [str(args.name), int(scope.server.id), ModLevelType.Role, int(role.id), int(args.priority)]):
+				if not self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"mod_levels (name, discord_sid, type, value, priority, ban_timelimit, ban_prioritylimit) VALUES (?, ?, ?, ?, ?, ?, ?)", [str(args.name), int(scope.server.id), ModLevelType.Role, int(role.id), int(args.priority), 0, -1]):
 					await self.ctx.send_message(scope.channel, "The moderator level can't be created.")
 
 		elif args.user:
@@ -163,7 +206,7 @@ class ModerationPlugin(Plugin):
 				return scope
 
 			with self.ctx.dbcon:
-				if not self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"mod_levels (name, discord_sid, type, value, priority) VALUES (?, ?, ?, ?, ?)", [str(args.name), int(scope.server.id), ModLevelType.User, int(user.id), int(args.priority)]):
+				if not self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"mod_levels (name, discord_sid, type, value, priority, ban_timelimit, ban_prioritylimit) VALUES (?, ?, ?, ?, ?, ?, ?)", [str(args.name), int(scope.server.id), ModLevelType.User, int(user.id), int(args.priority), 0, -1]):
 					await self.ctx.send_message(scope.channel, "The moderator level can't be created.")
 
 		return scope
@@ -196,11 +239,22 @@ class ModerationPlugin(Plugin):
 		return scope
 
 	async def execute_mod_levels(self, command, options, scope):
-		text = "**List of moderator levels:**"
+		text = "**__List of moderator levels__**\n"
 		with self.ctx.dbcon:
 			c = self.ctx.dbcon.cursor()
-			for row in c.execute("SELECT name, priority FROM "+self.ctx.dbprefix+"mod_levels WHERE discord_sid = ? ORDER BY priority DESC", [int(scope.server.id)]):
-				text = text+"\n - "+row[0]+" (Priority: "+str(row[1])+")"
+			for row in c.execute("SELECT name, priority, ban_timelimit, ban_prioritylimit FROM "+self.ctx.dbprefix+"mod_levels WHERE discord_sid = ? ORDER BY priority DESC", [int(scope.server.id)]):
+				text = text+"\n:label: **"+row[0]+"**"
+				text = text+"\n   - Priority: "+str(row[1])
+				if not row[2] or row[2] < 0:
+					tlimit = 0
+				else:
+					tlimit = row[2]
+				text = text+"\n   - Duration bewteen two bans: "+str(tlimit)+"h"
+				if not row[3] or row[3] < 0:
+					plimit = row[1]-1
+				else:
+					plimit = Math.max(row[3], row[1])
+				text = text+"\n   - Maximum priority that can be banned: "+str(plimit)
 
 		await self.ctx.send_message(scope.channel, text)
 
@@ -220,25 +274,9 @@ class ModerationPlugin(Plugin):
 			await self.ctx.send_message(scope.channel, "Member not found.")
 			return scope
 
-		with self.ctx.dbcon:
-			c = self.ctx.dbcon.cursor()
-			for row in c.execute("SELECT name, type, value FROM "+self.ctx.dbprefix+"mod_levels WHERE discord_sid = ? ORDER BY priority DESC", [int(scope.server.id)]):
-				if row[1] == ModLevelType.User:
-					if row[2] == member.id:
-						await self.ctx.send_message(scope.channel, member.name+"#"+member.discriminator+" moderator level is: "+row[0]+".")
-						return scope
-				if row[1] == ModLevelType.Role:
-					for r in member.roles:
-						if r.id == row[2]:
-							await self.ctx.send_message(scope.channel, member.name+"#"+member.discriminator+" moderator level is: "+row[0]+".")
-							return scope
-				if row[1] == ModLevelType.Channel:
-					chan = self.ctx.find_channel("<#"+row[2]+">", scope.server)
-					if chan and chan.permissions_for(member).send_messages:
-						await self.ctx.send_message(scope.channel, member.name+"#"+member.discriminator+" moderator level is: "+row[0]+".")
-						return scope
+		userLevel = self.get_mod_level(member)
 
-		await self.ctx.send_message(scope.channel, member.name+"#"+member.discriminator+" is not in any moderator levels.")
+		await self.ctx.send_message(scope.channel, member.name+"#"+member.discriminator+" moderator level is: "+userLevel["name"]+".")
 
 		return scope
 
@@ -252,20 +290,78 @@ class ModerationPlugin(Plugin):
 		if not args:
 			return scope
 
-		u = self.ctx.find_member(self.ctx.format_text(args.user, scope), scope.server)
+		u = self.ctx.find_member(self.ctx.format_text(args.member, scope), scope.server)
 		if not u:
 			await self.ctx.send_message(scope.channel, "Member not found. Member name must be of the form `@User#1234` or `User#1234`.")
 			return scope
 
-		if scope.permission < UserPermission.Script and not scope.user.permissions.ban_members:
-			await self.ctx.send_message(scope.channel, "You don't have the permission to ban members.")
+		if scope.user.id == u.id:
+			await self.ctx.send_message(scope.channel, "You can't ban yourself.")
+			return scope
+
+		userLevel = self.get_mod_level(scope.user)
+		targetLevel = self.get_mod_level(u)
+
+		if targetLevel["priority"] > userLevel["ban_prioritylimit"]:
+			await self.ctx.send_message(scope.channel, "You can't ban "+u.display_name+" with your level.")
 			return scope
 
 		try:
-			await self.ctx.client.ban(u)
+			with self.ctx.dbcon:
+				c = self.ctx.dbcon.cursor()
+				c.execute("SELECT id, last_time as 'last_time_ [timestamp]', datetime('now') as 'currtime [timestamp]' FROM "+self.ctx.dbprefix+"ban_time WHERE discord_sid = ? AND discord_uid = ?", [int(scope.server.id), int(scope.user.id)])
+				r = c.fetchone()
+				if r:
+					limit = r[2] - datetime.timedelta(hours=userLevel["ban_timelimit"])
+					if r[1] <= limit:
+						await self.ctx.client.ban(u)
+
+						self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"ban_time SET last_time = datetime('now') WHERE id = ?", [r[0]])
+					else:
+						await self.ctx.send_message(scope.channel, "You already banned someone. Please wait until "+str(limit)+" to ban again.")
+						return scope
+				else:
+					await self.ctx.client.ban(u)
+
+					self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"ban_time (discord_sid, discord_uid, last_time) VALUES (?, ?, datetime('now'))", [int(scope.server.id), int(scope.user.id)])
 		except:
-			await self.ctx.send_message(scope.channel, "You can't ban "+u.display_name+".")
-			pass
+			await self.ctx.send_message(scope.channel, "You can't ban "+u.display_name+" (please check that PraxisBot role is high enough).")
+			return scope
+
+		newScope = scope
+		newScope.deletecmd = True
+		return scope
+
+	async def execute_set_ban_options(self, command, options, scope):
+
+		parser = argparse.ArgumentParser(description='Configure bans for a moderation level.', prog=command)
+		parser.add_argument('name', help='Name of moderation level.')
+		parser.add_argument('--timelimit', help='Minimum duration between two bans in hours.')
+		parser.add_argument('--prioritylimit', help='Maximum level priority than can be banned.')
+
+		args = await self.parse_options(scope.channel, parser, options)
+
+		if not args:
+			return scope
+
+		with self.ctx.dbcon:
+			c = self.ctx.dbcon.cursor()
+			c.execute("SELECT id FROM "+self.ctx.dbprefix+"mod_levels WHERE discord_sid = ? AND name = ?", [int(scope.server.id), str(args.name)])
+			r = c.fetchone()
+			if r:
+				if args.timelimit:
+					if self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"mod_levels SET ban_timelimit = ? WHERE id = ?", [int(args.timelimit), int(r[0])]):
+						await self.ctx.send_message(scope.channel, "Time limitation for the level `"+args.name+"` updated to: "+args.timelimit+".")
+					else:
+						await self.ctx.send_message(scope.channel, "Can't update time limitation for the level `"+args.name+"`.")
+				if args.prioritylimit:
+					if not self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"mod_levels SET ban_prioritylimit = ? WHERE id = ?", [int(args.prioritylimit), int(r[0])]):
+						await self.ctx.send_message(scope.channel, "Priority limitation for the level `"+args.name+"` updated to: "+args.prioritylimit+".")
+					else:
+						await self.ctx.send_message(scope.channel, "Can't update priority limitation for the level `"+args.name+"`.")
+
+			else:
+				await self.ctx.send_message(scope.channel, "The moderator level `"+args.name+"` doesn't exist.")
 
 		return scope
 
@@ -273,9 +369,9 @@ class ModerationPlugin(Plugin):
 		return ["list_channels", "create_mod_level", "delete_mod_level", "mod_levels", "get_mod_level"]
 
 	async def execute_command(self, shell, command, options, scope):
-		#if command == "ban":
-		#	scope.iter = scope.iter+1
-		#	return await self.execute_ban(command, options, scope)
+		if command == "ban":
+			scope.iter = scope.iter+1
+			return await self.execute_ban(command, options, scope)
 		if command == "list_channels":
 			scope.iter = scope.iter+1
 			return await self.execute_list_channels(command, options, scope)
@@ -291,5 +387,8 @@ class ModerationPlugin(Plugin):
 		if command == "get_mod_level":
 			scope.iter = scope.iter+1
 			return await self.execute_get_mod_level(command, options, scope)
+		if command == "set_ban_options":
+			scope.iter = scope.iter+1
+			return await self.execute_set_ban_options(command, options, scope)
 
 		return scope

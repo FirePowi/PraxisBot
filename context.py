@@ -31,7 +31,7 @@ class Context:
 		self.mode = mode
 		self.client = client
 		self.dbprefix = "pb_"
-		self.dbcon = sqlite3.connect("databases/praxisbot-"+mode+".db")
+		self.dbcon = sqlite3.connect("databases/praxisbot-"+mode+".db", detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
 
 		with self.dbcon:
 			#Server list

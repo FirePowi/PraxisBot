@@ -71,7 +71,6 @@ class TriggerPlugin(Plugin):
 			return await self.execute_script(shell, script, subScope)
 		return scope
 
-
 	#Command Add Trigger
 	async def execute_create_trigger(self, command, options, scope):
 		if scope.permission < UserPermission.Admin:
@@ -121,6 +120,47 @@ class TriggerPlugin(Plugin):
 
 		return scope
 
+	#Command Edit Trigger
+	async def execute_edit_trigger(self, command, options, scope):
+		if scope.permission < UserPermission.Admin:
+			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
+			return scope
+
+		script = options.split("\n");
+		if len(script) > 0:
+			options = script[0]
+			script = script[1:]
+
+		parser = argparse.ArgumentParser(description='Associate a script to a trigger. The script must be written on the line after the command.', prog=command)
+		parser.add_argument('command', help='Name of the trigger')
+		parser.add_argument('--autodelete', '-a', action='store_true', help='Delete the command after execute it')
+		parser.add_argument('--description', '-d', default="", help='Description of the command')
+
+		args = await self.parse_options(scope.channel, parser, options)
+
+		if args:
+			if len(script) == 0:
+				await self.ctx.send_message(scope.channel, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\nadd_trigger my_new_command\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
+				return scope
+
+			#Check if the command is valid
+			if not (self.command_regex.fullmatch(args.command)) and (args.command not in ["@join", "@leave", "@ban", "@unban"]):
+				await self.ctx.send_message(scope.channel, "The command `"+args.command+"` is not alphanumeric")
+				return scope
+
+			#Process
+			command_chk = await self.get_trigger_script(args.command, scope.server)
+			if command_chk:
+				with self.ctx.dbcon:
+					if self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"triggers SET script = ?, deletecmd = ?, description = ? WHERE discord_sid = ? AND command = ?", [str("\n".join(script)), int(args.autodelete), str(args.description), int(scope.server.id), str(args.command)]):
+						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` edited.")
+					else:
+						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` can't be edited (internal error).")
+			else:
+				await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` is unknown.")
+
+		return scope
+
 	#Command Delete Trigger
 	async def execute_delete_trigger(self, command, options, scope):
 		if scope.permission < UserPermission.Admin:
@@ -164,7 +204,7 @@ class TriggerPlugin(Plugin):
 		return scope
 
 	async def list_commands(self, server):
-		res = ["create_trigger", "delete_trigger", "show_trigger"]
+		res = ["create_trigger", "delete_trigger", "edit_trigger", "show_trigger"]
 		with self.ctx.dbcon:
 			c = self.ctx.dbcon.cursor()
 			for row in c.execute("SELECT command FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ?", [int(server.id)]):
@@ -175,6 +215,9 @@ class TriggerPlugin(Plugin):
 		if command == "create_trigger":
 			scope.iter = scope.iter+1
 			return await self.execute_create_trigger(command, options, scope)
+		elif command == "edit_trigger":
+			scope.iter = scope.iter+1
+			return await self.execute_edit_trigger(command, options, scope)
 		elif command == "delete_trigger":
 			scope.iter = scope.iter+1
 			return await self.execute_delete_trigger(command, options, scope)
