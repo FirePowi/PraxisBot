@@ -65,6 +65,7 @@ class TriggerPlugin(Plugin):
 		if script:
 			script = script.split("\n");
 			subScope = scope
+			subScope.permission = UserPermission.Script
 			subScope.deletecmd = autodelete
 			subScope.vars["params"] = param.strip()
 			return await self.execute_script(shell, script, subScope)
