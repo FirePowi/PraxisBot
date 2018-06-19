@@ -79,7 +79,7 @@ class ModerationPlugin(Plugin):
 					"priority":row[3],
 					"ban_timelimit":row[4],
 					"ban_prioritylimit":row[5],
-					"purge":(row[6] > 0)
+					"purge":row[6]
 				}
 
 				if not row[4] or row[4] < 0:
@@ -88,6 +88,10 @@ class ModerationPlugin(Plugin):
 					res["ban_prioritylimit"] = 0
 				if row[5] > res["priority"]:
 					res["ban_prioritylimit"] = res["priority"]
+				if row[6] and row[6] != 0:
+					res["purge"] = 1
+				else:
+					res["purge"] = 0
 
 				if row[0] == ModLevelType.User:
 					if row[1] == member.id:
