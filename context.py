@@ -22,6 +22,7 @@ import re
 import sqlite3
 import random
 import discord
+import datetime
 
 from scope import UserPermission
 from scope import ExecutionScope
@@ -87,6 +88,8 @@ class Context:
 				tagOutput = server.name
 			elif tag.lower() == "n":
 				tagOutput = "\n"
+			elif tag.lower() == "now":
+				tagOutput = str(datetime.datetime.now())
 			elif tag.lower() == "channel" and c:
 				tagOutput = c.name
 			elif tag.lower() == "#channel" and c:

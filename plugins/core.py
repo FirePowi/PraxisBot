@@ -95,7 +95,7 @@ class CorePlugin(Plugin):
 			if not re.fullmatch('[a-zA-Z_][a-zA-Z0-9_]*', var):
 				await self.ctx.send_message(scope.channel, "Variables must be alphanumeric.")
 				return scope
-			if var in ["user", "channel", "server", "user_avatar", "user_time", "params", "n"]:
+			if var in ["user", "channel", "server", "user_avatar", "user_time", "params", "n", "now"]:
 				await self.ctx.send_message(scope.channel, "This variable is reserved.")
 				return scope
 
