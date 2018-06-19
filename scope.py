@@ -25,8 +25,9 @@ class UserPermission:
 	Owner=3
 
 class ExecutionBlock:
-	def __init__(self, endname, e):
+	def __init__(self, endname, elsename, e):
 		self.endname = endname
+		self.elsename = elsename
 		self.execute = e
 
 class ExecutionScope:

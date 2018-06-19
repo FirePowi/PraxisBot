@@ -22,6 +22,7 @@ along with PraxisBot.  If not, see <http://www.gnu.org/licenses/>.
 
 import discord
 import sys
+import io
 import traceback
 
 from context import Context
@@ -62,10 +63,11 @@ class PraxisBot(discord.Client):
 		Create an instance of a plugin and register it
 		"""
 		try:
-			instance = plugin(self.ctx)
+			instance = plugin(self.ctx, self)
 			self.plugins.append(instance)
 			self.ctx.log("Plugin {0} loaded".format(plugin.name))
 		except:
+			print(traceback.format_exc())
 			self.ctx.log("Plugin {0} can't be loaded".format(plugin.name))
 
 	def load_all_plugins(self):
@@ -82,13 +84,16 @@ class PraxisBot(discord.Client):
 
 		try:
 			for p in self.plugins:
-				newScope = await p.execute_command(self, command, options, scope)
-				if scope.iter != newScope.iter:
-					return s
+				i = scope.iter
+				scope = await p.execute_command(self, command, options, scope)
+				if scope.iter != i:
+					return scope
+
+			await self.ctx.send_message(scope.channel, "Command not found:\n`"+command+options+"`")
 
 		except Exception as exception:
 			print(traceback.format_exc())
-			await self.ctx.send_message(scope.channel, "The following command failed ("+type(exception).__name__+"):\n`"+command+options+"`")
+			await self.ctx.send_message(scope.channel, "PraxisBot Internal Error ("+type(exception).__name__+"):\n`"+command+options+"`")
 			scope.abort = True
 			pass
 
@@ -138,6 +143,15 @@ class PraxisBot(discord.Client):
 				cmdlist = cmdlist + await p.list_commands(message.server)
 			cmdlist = sorted(cmdlist)
 			await self.ctx.send_message(message.channel, "Command list: "+", ".join(cmdlist)+".")
+
+		elif args[0] == "dump":
+			text = []
+			for p in self.plugins:
+				text = text + await p.dump(message.server)
+
+			f = io.BytesIO(("\n----------------------\n".join(text)).encode('UTF-8'))
+			await self.ctx.client.send_file(message.channel, f, filename="commands.txt", content=str(len(text))+" commands generated.")
+			f.close()
 
 		else:
 			scope = ExecutionScope()

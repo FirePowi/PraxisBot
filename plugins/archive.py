@@ -38,7 +38,7 @@ class ArchivePlugin(Plugin):
 
 	name = "Archive"
 
-	def __init__(self, ctx):
+	def __init__(self, ctx, shell):
 		super().__init__(ctx)
 
 	def archive_message(self, m):

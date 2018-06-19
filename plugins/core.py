@@ -22,6 +22,7 @@ import shlex
 import argparse
 import re
 import discord
+import copy
 from io import StringIO
 from plugin import Plugin
 from scope import UserPermission
@@ -35,7 +36,7 @@ class CorePlugin(Plugin):
 
 	name = "Core"
 
-	def __init__(self, ctx):
+	def __init__(self, ctx, shell):
 		super().__init__(ctx)
 
 		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"variables(id INTEGER PRIMARY KEY, discord_sid INTEGER, name TEXT, value TEXT)");
@@ -53,7 +54,7 @@ class CorePlugin(Plugin):
 		args = await self.parse_options(scope.channel, parser, options)
 
 		if args:
-			subScope = scope
+			subScope = copy.deepcopy(scope)
 			if args.channel:
 				c = self.ctx.find_channel(self.ctx.format_text(args.channel, scope), scope.server)
 				if c:
@@ -151,9 +152,8 @@ class CorePlugin(Plugin):
 			if args.inverse:
 				res = not res
 
-			newScope = scope
-			newScope.blocks.append(ExecutionBlock("endif", res))
-			return newScope
+			scope.blocks.append(ExecutionBlock("endif", "else", res))
+			return scope
 
 		return scope
 
@@ -239,25 +239,33 @@ class CorePlugin(Plugin):
 			await self.ctx.send_message(scope.channel, "Only server owner can run this command.")
 			return scope
 
-		subScope = scope
+		subScope = copy.deepcopy(scope)
+		subScope.level = subScope.level+1
 		for m in scope.server.members:
 			if not m.bot:
 				subScope.vars["iter"] = m.mention
-				subScope.level = subScope.level+1
 				c = options.strip().split(" ")
 				o = c[1:]
 				c = c[0]
 				subScope = await shell.execute_command(c, " ".join(o).replace("{{iter}}", m.name+"#"+m.discriminator), subScope)
 
-		newScope = subScope
+		newScope = copy.deepcopy(subScope)
 		newScope.level = newScope.level-1
 		return newScope
 
 	async def execute_exit(self, shell, command, options, scope):
+		scope.abort = True
+		return scope
 
-		newScope = scope
-		newScope.abort = True
-		return newScope
+	async def dump(self, server):
+		text = []
+
+		with self.ctx.dbcon:
+			c = self.ctx.dbcon.cursor()
+			for row in c.execute("SELECT name, value FROM "+self.ctx.dbprefix+"variables WHERE discord_sid = ? ORDER BY name", [int(server.id)]):
+				text.append("set_variable --global "+row[0]+" \""+row[0]+"\"")
+
+		return text
 
 	async def list_commands(self, server):
 		return ["say", "if", "set_variable", "change_roles", "set_command_prefix", "script", "exit", "for_members"]

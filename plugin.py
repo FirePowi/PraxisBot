@@ -23,6 +23,7 @@ import io
 import context
 import traceback
 import shlex
+import copy
 
 class RedirectOutput():
 	def __init__(self, dest):
@@ -61,9 +62,11 @@ class Plugin:
 		return None
 
 	async def execute_script(self, shell, script, scope):
-		subScope = scope
+		subScope = copy.deepcopy(scope)
 		subScope.level = subScope.level+1
 		for s in script:
+			s = s.strip()
+
 			args = s.split(" ");
 			c = args[0]
 			b = None
@@ -71,14 +74,19 @@ class Plugin:
 				b = subScope.blocks[len(subScope.blocks)-1]
 			if b and b.endname == c:
 				subScope.blocks.pop()
+			elif b and b.elsename == c:
+				subScope.blocks[len(subScope.blocks)-1].execute = not subScope.blocks[len(subScope.blocks)-1].execute
 			elif not b or b.execute:
 				o = " ".join(args[1:])
 				subScope = await shell.execute_command(c, o, subScope)
 				if subScope.abort:
 					break
-		scope = subScope
-		scope.level = scope.level-1
-		return scope
+		newScope = copy.deepcopy(subScope)
+		newScope.level = newScope.level-1
+		return newScope
+
+	async def dump(self, server):
+		return []
 
 	async def list_commands(self, server):
 		return []

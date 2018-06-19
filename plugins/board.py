@@ -36,7 +36,7 @@ class BoardPlugin(Plugin):
 
 	name = "Board"
 
-	def __init__(self, ctx):
+	def __init__(self, ctx, shell):
 		super().__init__(ctx)
 		self.boardname_regex = re.compile('[a-zA-Z0-9_-]+')
 

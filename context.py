@@ -111,6 +111,12 @@ class Context:
 
 		return formatedText
 
+	def find_server(self, server_name):
+		for s in self.client.servers:
+			if s.id == server_name:
+				return s
+		return None
+
 	def find_channel(self, chan_name, server):
 		if not chan_name:
 			return None
@@ -151,7 +157,9 @@ class Context:
 			return None
 
 		for r in server.roles:
-			if "<@"+r.id+">" == role_name:
+			if "<@&"+r.id+">" == role_name:
+				return r
+			elif r.id == role_name:
 				return r
 			elif r.name == role_name:
 				return r

@@ -34,7 +34,7 @@ class HTTPPlugin(Plugin):
 
 	name = "HTTP"
 
-	def __init__(self, ctx):
+	def __init__(self, ctx, shell):
 		super().__init__(ctx)
 
 	async def execute_if_http(self, command, options, scope):
@@ -54,9 +54,8 @@ class HTTPPlugin(Plugin):
 			if args.inverse:
 				res = not res
 
-			newScope = scope
-			newScope.blocks.append(ExecutionBlock("endif", res))
-			return newScope
+			scope.blocks.append(ExecutionBlock("endif", "else", res))
+			return scope
 
 		return scope
 
