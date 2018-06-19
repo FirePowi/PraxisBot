@@ -23,6 +23,7 @@ import argparse
 import re
 import asyncio
 import datetime
+import copy
 from io import StringIO
 from plugin import Plugin
 from scope import UserPermission
