@@ -108,7 +108,6 @@ class TriggerPlugin(Plugin):
 
 	async def execute_trigger_script(self, shell, command, param, scope):
 		script = None
-		autodelete = False
 
 		with self.ctx.dbcon:
 			c = self.ctx.dbcon.cursor()
@@ -116,13 +115,11 @@ class TriggerPlugin(Plugin):
 			r = c.fetchone()
 			if r:
 				script = r[0]
-				autodelete = (r[1] > 0)
 
 		if script:
 			script = script.split("\n");
 			subScope = copy.deepcopy(scope)
 			subScope.permission = UserPermission.Script
-			subScope.deletecmd = autodelete
 			subScope.vars["params"] = param.strip()
 			return await self.execute_script(shell, script, subScope)
 		return scope
