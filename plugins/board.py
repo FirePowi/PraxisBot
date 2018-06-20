@@ -60,7 +60,7 @@ class BoardPlugin(Plugin):
 		parser.add_argument('boardname', help='Name of the board')
 		parser.add_argument('--channel', '-c', help='Channel where the board will be.')
 		parser.add_argument('--content', help='Channel where the board will be.')
-		parser.add_argument('--format', help='Apply PraxisBot text formating.')
+		parser.add_argument('--format', action='store_true', help='Apply PraxisBot text formating.')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
@@ -142,19 +142,28 @@ class BoardPlugin(Plugin):
 	async def execute_edit_board(self, command, options, scope):
 
 		content = options.split("\n");
+		options = content[0]
 		if len(content) > 1:
-			options = content[0]
 			content = "\n".join(content[1:])
 		else:
-			await self.ctx.send_message(scope.channel, "You must write a content in the second line. Ex.: ```\n"+command+options+"\nMy message.```")
-			return scope
-
+			content = None
 		parser = argparse.ArgumentParser(description='Edit a board. Wirte the content of the board in the second line', prog=command)
 		parser.add_argument('boardname', help='Name of the board')
+		parser.add_argument('--content', help='Channel where the board will be.')
+		parser.add_argument('--format', action='store_true', help='Apply PraxisBot text formating.')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
 		if args:
+			if args.content:
+				content = args.content
+			elif not content:
+				await self.ctx.send_message(scope.channel, "You must write a content in the second line. Ex.: ```\n"+command+options+"\nMy message.```")
+				return scope
+
+			if args.format:
+				content = self.ctx.format_text(content, scope)
+
 			boardname = self.ctx.format_text(args.boardname, scope)
 
 			if not self.boardname_regex.fullmatch(boardname):

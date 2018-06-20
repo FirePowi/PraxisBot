@@ -133,8 +133,6 @@ class CorePlugin(Plugin):
 			elif args.find:
 				a = self.ctx.format_text(args.firstvar, scope).lower()
 				b = self.ctx.format_text(args.find, scope).lower()
-				print(a)
-				print(b)
 				res = (a.find(b) >= 0)
 			elif args.ismember:
 				u = self.ctx.find_member(self.ctx.format_text(args.firstvar, scope), scope.server)
