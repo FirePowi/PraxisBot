@@ -111,7 +111,7 @@ class TriggerPlugin(Plugin):
 
 		with self.ctx.dbcon:
 			c = self.ctx.dbcon.cursor()
-			c.execute("SELECT script, deletecmd FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ? AND command = ?", [int(scope.server.id), command])
+			c.execute("SELECT script FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ? AND command = ?", [int(scope.server.id), command])
 			r = c.fetchone()
 			if r:
 				script = r[0]

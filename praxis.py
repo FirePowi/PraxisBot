@@ -24,6 +24,8 @@ import discord
 import sys
 import io
 import traceback
+import time
+import asyncio
 
 from context import Context
 from scope import UserPermission
@@ -34,6 +36,7 @@ from plugins.board import BoardPlugin
 from plugins.archive import ArchivePlugin
 from plugins.moderation import ModerationPlugin
 from plugins.http import HTTPPlugin
+from plugins.poll import PollPlugin
 
 ########################################################################
 # Init
@@ -57,6 +60,7 @@ class PraxisBot(discord.Client):
 
 		self.ctx = None
 		self.plugins = []
+		self.loopstarted = False
 
 	def load_plugin(self, plugin):
 		"""
@@ -77,6 +81,7 @@ class PraxisBot(discord.Client):
 		self.load_plugin(ArchivePlugin)
 		self.load_plugin(ModerationPlugin)
 		self.load_plugin(HTTPPlugin)
+		self.load_plugin(PollPlugin)
 
 	async def execute_command(self, command, options, scope):
 		if scope.level > 8:
@@ -105,6 +110,20 @@ class PraxisBot(discord.Client):
 		self.ctx.log("Logged on as {0}".format(self.user))
 
 		self.load_all_plugins()
+
+		if not self.loopstarted:
+			self.loopstarted = True
+			prevTime = time.time()
+			while True:
+				currTime = time.time()
+				sleepDuration = 5 - (currTime - prevTime)
+				prevTime = currTime
+				if sleepDuration > 0:
+					await asyncio.sleep(sleepDuration)
+
+				for p in self.plugins:
+					await p.on_loop(self)
+
 
 	def add_global_variables_in_scope(self, scope):
 		newScope = scope

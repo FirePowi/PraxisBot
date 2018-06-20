@@ -88,6 +88,9 @@ class Plugin:
 	async def dump(self, server):
 		return []
 
+	async def on_loop(self, shell):
+		return
+
 	async def list_commands(self, server):
 		return []
 
