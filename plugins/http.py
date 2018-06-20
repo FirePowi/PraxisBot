@@ -154,7 +154,7 @@ class HTTPPlugin(Plugin):
 					c.execute("SELECT name, content, filter FROM "+self.ctx.dbprefix+"cookies WHERE discord_sid = ? AND nameid = ?", [int(scope.server.id), str(args.cookie)])
 					row = c.fetchone()
 					if row:
-						if re.fullmatch(row[2], args.url):
+						if re.fullmatch(row[2], url):
 							cookies[row[0]] = row[1]
 						else:
 							await self.ctx.send_message(scope.channel, "This cookie can't be used with this URL.")
@@ -206,7 +206,7 @@ class HTTPPlugin(Plugin):
 					c.execute("SELECT name, content, filter FROM "+self.ctx.dbprefix+"cookies WHERE discord_sid = ? AND nameid = ?", [int(scope.server.id), str(args.cookie)])
 					row = c.fetchone()
 					if row:
-						if re.fullmatch(row[2], args.url):
+						if re.fullmatch(row[2], url):
 							cookies[row[0]] = row[1]
 						else:
 							await self.ctx.send_message(scope.channel, "This cookie can't be used with this URL.")
