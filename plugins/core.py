@@ -120,6 +120,7 @@ class CorePlugin(Plugin):
 		parser.add_argument('--hasroles', nargs='+', help='Test if a member has one of the listed roles', metavar='ROLE')
 		parser.add_argument('--ismember', action='store_true', help='Test if a parameter is a valid member')
 		parser.add_argument('--not', dest='inverse', action='store_true', help='Inverse the result of the test')
+		parser.add_argument('--find', help='Return truc if an occurence of B is found in A (case insensitive)')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
@@ -129,6 +130,12 @@ class CorePlugin(Plugin):
 				a = self.ctx.format_text(args.firstvar, scope)
 				b = self.ctx.format_text(args.equal, scope)
 				res = (a == b)
+			elif args.find:
+				a = self.ctx.format_text(args.firstvar, scope).lower()
+				b = self.ctx.format_text(args.find, scope).lower()
+				print(a)
+				print(b)
+				res = (a.find(b) >= 0)
 			elif args.ismember:
 				u = self.ctx.find_member(self.ctx.format_text(args.firstvar, scope), scope.server)
 				res = (u != None)
@@ -281,6 +288,9 @@ class CorePlugin(Plugin):
 		elif command == "set_variable":
 			scope.iter = scope.iter+1
 			return await self.execute_set_variable(command, options, scope)
+		elif command == "add_user_in_variable":
+			scope.iter = scope.iter+1
+			return await self.execute_add_user_in_variable(command, options, scope)
 		elif command == "change_roles":
 			scope.iter = scope.iter+1
 			return await self.execute_change_roles(command, options, scope)

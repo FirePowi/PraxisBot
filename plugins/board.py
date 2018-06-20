@@ -59,10 +59,18 @@ class BoardPlugin(Plugin):
 		parser = argparse.ArgumentParser(description='Create a new board.', prog=command)
 		parser.add_argument('boardname', help='Name of the board')
 		parser.add_argument('--channel', '-c', help='Channel where the board will be.')
+		parser.add_argument('--content', help='Channel where the board will be.')
+		parser.add_argument('--format', help='Apply PraxisBot text formating.')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
 		if args:
+			if args.content:
+				content = args.content
+
+			if args.format:
+				content = self.ctx.format_text(content, scope)
+
 			boardname = self.ctx.format_text(args.boardname, scope)
 
 			if not self.boardname_regex.fullmatch(boardname):
