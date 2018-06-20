@@ -167,7 +167,7 @@ class TriggerPlugin(Plugin):
 					await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` already exists. Please use --force to replace it.")
 			else:
 				with self.ctx.dbcon:
-					if self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"triggers (discord_sid, command, script) VALUES (?, ?, ?, ?, ?)", [int(scope.server.id), str(args.command), str("\n".join(script))]):
+					if self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"triggers (discord_sid, command, script) VALUES (?, ?, ?)", [int(scope.server.id), str(args.command), str("\n".join(script))]):
 						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` created.")
 					else:
 						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` can't be created (internal error).")
