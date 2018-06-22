@@ -340,7 +340,7 @@ class ModerationPlugin(Plugin):
 				if r:
 					limit = r[2] - datetime.timedelta(hours=userLevel["ban_timelimit"])
 					if r[1] <= limit:
-						await self.ctx.client.ban(u)
+						await self.ctx.client.ban(u, delete_message_days=0)
 
 						self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"ban_time SET last_time = datetime('now') WHERE id = ?", [r[0]])
 					else:
