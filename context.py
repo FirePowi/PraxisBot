@@ -169,6 +169,20 @@ class Context:
 
 		return None
 
+	def find_emoji(self, emoji_name, server):
+		if not emoji_name:
+			return None
+
+		for e in server.emojis:
+			if "<:"+e.name+":"+e.id+">" == emoji_name:
+				return e
+			elif e.id == emoji_name:
+				return e
+			elif e.name == emoji_name:
+				return e
+
+		return None
+
 	def get_default_channel(self, server):
 		for c in server.channels:
 			if c.type == discord.ChannelType.text:

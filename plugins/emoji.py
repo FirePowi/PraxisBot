@@ -90,11 +90,7 @@ class EmojiPlugin(Plugin):
 		if not args:
 			return scope
 
-		emoji = None
-		for e in scope.server.emojis:
-			if e.name == args.name:
-				emoji = e
-				break
+		emoji = self.ctx.find_emoji(args.name, scope.server)
 
 		if not emoji:
 			await self.ctx.send_message(scope.channel, "Emoji `"+args.name+"` not found on this server.")
@@ -113,11 +109,7 @@ class EmojiPlugin(Plugin):
 		if not args:
 			return scope
 
-		emoji = None
-		for e in scope.server.emojis:
-			if e.name == args.name:
-				emoji = e
-				break
+		emoji = self.ctx.find_emoji(args.name, scope.server)
 
 		if not emoji:
 			await self.ctx.send_message(scope.channel, "Emoji `"+args.name+"` not found on this server.")
