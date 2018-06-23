@@ -37,6 +37,7 @@ from plugins.archive import ArchivePlugin
 from plugins.moderation import ModerationPlugin
 from plugins.http import HTTPPlugin
 from plugins.poll import PollPlugin
+from plugins.emoji import EmojiPlugin
 
 ########################################################################
 # Init
@@ -82,6 +83,7 @@ class PraxisBot(discord.Client):
 		self.load_plugin(ModerationPlugin)
 		self.load_plugin(HTTPPlugin)
 		self.load_plugin(PollPlugin)
+		self.load_plugin(EmojiPlugin)
 
 	async def execute_command(self, command, options, scope):
 		if scope.level > 8:

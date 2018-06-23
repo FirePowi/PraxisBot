@@ -86,6 +86,7 @@ class CorePlugin(Plugin):
 		parser.add_argument('name', help='Variable name')
 		parser.add_argument('value', help='Variable value')
 		parser.add_argument('--global', dest='glob', action='store_true', help='Set the variable for all commands on this server')
+		parser.add_argument('--intadd', action='store_true', help='Add the integer value to the variable')
 
 		args = await self.parse_options(scope.channel, parser, options)
 
@@ -98,6 +99,13 @@ class CorePlugin(Plugin):
 			if var in ["user", "channel", "server", "user_avatar", "user_time", "params", "n", "now"]:
 				await self.ctx.send_message(scope.channel, "This variable is reserved.")
 				return scope
+
+			if args.intadd:
+				try:
+					val = int(scope.vars[var]) + int(val)
+				except ValueError:
+					val = scope.vars[var]
+					pass
 
 			scope.vars[var] = val
 
@@ -273,7 +281,7 @@ class CorePlugin(Plugin):
 		return text
 
 	async def list_commands(self, server):
-		return ["say", "if", "set_variable", "change_roles", "set_command_prefix", "script", "exit", "for_members"]
+		return ["say", "if", "set_variable", "change_roles", "set_command_prefix", "script", "exit", "for_members", "math"]
 
 	async def execute_command(self, shell, command, options, scope):
 
@@ -286,9 +294,6 @@ class CorePlugin(Plugin):
 		elif command == "set_variable":
 			scope.iter = scope.iter+1
 			return await self.execute_set_variable(command, options, scope)
-		elif command == "add_user_in_variable":
-			scope.iter = scope.iter+1
-			return await self.execute_add_user_in_variable(command, options, scope)
 		elif command == "change_roles":
 			scope.iter = scope.iter+1
 			return await self.execute_change_roles(command, options, scope)
