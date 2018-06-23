@@ -102,9 +102,9 @@ class CorePlugin(Plugin):
 
 			if args.intadd:
 				try:
-					val = int(scope.vars[var]) + int(val)
+					val = str(int(scope.vars[var]) + int(val))
 				except ValueError:
-					val = scope.vars[var]
+					val = str(scope.vars[var])
 					pass
 
 			scope.vars[var] = val

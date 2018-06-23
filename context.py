@@ -108,7 +108,7 @@ class Context:
 				tagOutput = str(u.avatar_url.replace(".webp", ".png"))
 			elif tag in scope.vars:
 				tagOutput = scope.vars[tag]
-			formatedText = formatedText + tagOutput
+			formatedText = formatedText + str(tagOutput)
 
 		formatedText = formatedText + text[textIter:]
 
