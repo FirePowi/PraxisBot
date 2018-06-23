@@ -134,6 +134,9 @@ class EmojiPlugin(Plugin):
 		text = "**List of emojis**\n"
 
 		for e in scope.server.emojis:
+			if len(text) > 1000:
+				await self.ctx.send_message(scope.channel, text)
+				text = ""
 			text = text+"\n - <:"+e.name+":"+e.id+"> `"+e.name+"`"
 
 		await self.ctx.send_message(scope.channel, text)
