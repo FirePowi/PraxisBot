@@ -25,131 +25,109 @@ import discord
 import traceback
 import datetime
 import io
-import sqlite3
 import requests
-from io import StringIO
-from plugin import Plugin
-from scope import UserPermission
-from scope import ExecutionScope
-from scope import ExecutionBlock
+import praxisbot
 
-class EmojiPlugin(Plugin):
+class EmojiPlugin(praxisbot.Plugin):
 	"""
 	Emoji commands
 	"""
 
 	name = "Emoji"
 
-	def __init__(self, ctx, shell):
-		super().__init__(ctx)
+	def __init__(self, shell):
+		super().__init__(shell)
 
-	async def execute_create_emoji(self, command, options, scope):
-		if scope.permission < UserPermission.Admin:
-			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
-			return scope
+		self.add_command("create_emoji", self.execute_create_emoji)
+		self.add_command("delete_emoji", self.execute_delete_emoji)
+		self.add_command("test_emoji", self.execute_test_emoji)
+		self.add_command("emojis", self.execute_emojis)
 
-		parser = argparse.ArgumentParser(description='Create a custom emoji on the server.', prog=command)
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_create_emoji(self, scope, command, options, lines, **kwargs):
+		"""
+		Create a custom emoji on the server.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('name', help='Name of the emoji')
 		parser.add_argument('url', help='URL of the emoji')
-
-		args = await self.parse_options(scope.channel, parser, options)
-
+		args = await self.parse_options(scope, parser, options)
 		if not args:
-			return scope
+			return
 
-		emoji = None
-		for e in scope.server.emojis:
-			if e.name == args.name:
-				emoji = e
-				break
-
+		emoji = scope.shell.find_emoji(args.name, scope.server)
 		if emoji:
-			await self.ctx.send_message(scope.channel, "An emoji with this name is already on this server: <:"+emoji.name+":"+emoji.id+">.")
-			return scope
+			await scope.shell.print_error(scope, "An emoji with this name is already on this server: <:"+emoji.name+":"+emoji.id+">.")
+			return
 
 		#Get image
 		result = requests.get(args.url, allow_redirects=True)
 		if not result.ok:
-			await self.ctx.send_message(scope.channel, "Can't download image located at:`"+url+"` ("+result.status_code+").")
-			return scope
+			await scope.shell.print_error(scope, "Can't download image located at:`"+url+"` ("+result.status_code+").")
+			return
 
-		emoji = await self.ctx.client.create_custom_emoji(scope.server, name=args.name, image=result.content)
+		emoji = await scope.shell.client.create_custom_emoji(scope.server, name=args.name, image=result.content)
+		await scope.shell.print_success(scope, "Emoji `:"+emoji.name+":` <:"+emoji.name+":"+emoji.id+"> created.")
 
-		return scope
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_delete_emoji(self, scope, command, options, lines, **kwargs):
+		"""
+		Delete a custom emoji from the server.
+		"""
 
-	async def execute_delete_emoji(self, command, options, scope):
-		if scope.permission < UserPermission.Admin:
-			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
-			return scope
-
-		parser = argparse.ArgumentParser(description='Delete a custom emoji from the server.', prog=command)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('name', help='Name of the emoji')
-
-		args = await self.parse_options(scope.channel, parser, options)
-
+		args = await self.parse_options(scope, parser, options)
 		if not args:
-			return scope
+			return
 
-		emoji = self.ctx.find_emoji(args.name, scope.server)
-
+		emoji = scope.shell.find_emoji(args.name, scope.server)
 		if not emoji:
-			await self.ctx.send_message(scope.channel, "Emoji `"+args.name+"` not found on this server.")
-			return scope
+			await scope.shell.print_error(scope, "Emoji `"+args.name+"` not found on this server.")
+			return
 
-		await self.ctx.client.delete_custom_emoji(emoji)
+		await scope.shell.client.delete_custom_emoji(emoji)
+		await scope.shell.print_success(scope, "Emoji `:"+emoji.name+":` deleted.")
 
-		return scope
+	@praxisbot.command
+	async def execute_test_emoji(self, scope, command, options, lines, **kwargs):
+		"""
+		Display a custom emoji in all sizes.
+		"""
 
-	async def execute_test_emoji(self, command, options, scope):
-		parser = argparse.ArgumentParser(description='Display a custom emoji.', prog=command)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('name', help='Name of the emoji')
-
-		args = await self.parse_options(scope.channel, parser, options)
-
+		args = await self.parse_options(scope, parser, options)
 		if not args:
-			return scope
+			return
 
-		emoji = self.ctx.find_emoji(args.name, scope.server)
-
+		emoji = scope.shell.find_emoji(args.name, scope.server)
 		if not emoji:
-			await self.ctx.send_message(scope.channel, "Emoji `"+args.name+"` not found on this server.")
-			return scope
+			await scope.shell.print_error(scope, "Emoji `"+args.name+"` not found on this server.")
+			return
 
-		await self.ctx.send_message(scope.channel, "<:"+emoji.name+":"+emoji.id+">\n**ID: **"+str(emoji.id)+"\n**Name: **"+str(emoji.name)+"\n**URL: **"+str(emoji.url)+"")
+		await scope.shell.client.send_message(scope.channel, "<:"+emoji.name+":"+emoji.id+">\n**ID: **"+str(emoji.id)+"\n**Name: **"+str(emoji.name)+"\n**URL: **"+str(emoji.url)+"")
 
-		msg = await self.ctx.send_message(scope.channel, "<:"+emoji.name+":"+emoji.id+">")
-		await self.ctx.client.add_reaction(msg, emoji)
+		msg = await scope.shell.client.send_message(scope.channel, "<:"+emoji.name+":"+emoji.id+">")
+		await scope.shell.client.add_reaction(msg, emoji)
 
-		return scope
+	@praxisbot.command
+	async def execute_emojis(self, scope, command, options, lines, **kwargs):
+		"""
+		List of all custom emojis
+		"""
 
-	async def execute_emojis(self, command, options, scope):
-		text = "**List of emojis**\n"
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
+		stream = praxisbot.MessageStream(scope)
+		await stream.send("**List of emojis**\n")
 		for e in scope.server.emojis:
-			if len(text) > 1000:
-				await self.ctx.send_message(scope.channel, text)
-				text = ""
-			text = text+"\n - <:"+e.name+":"+e.id+"> `"+e.name+"`"
+			await stream.send("\n - <:"+e.name+":"+e.id+"> `"+e.name+"`")
 
-		await self.ctx.send_message(scope.channel, text)
-
-		return scope
-
-	async def list_commands(self, server):
-		return ["create_emoji", "delete_emoji", "test_emoji"]
-
-	async def execute_command(self, shell, command, options, scope):
-		if command == "create_emoji":
-			scope.iter = scope.iter+1
-			return await self.execute_create_emoji(command, options, scope)
-		elif command == "delete_emoji":
-			scope.iter = scope.iter+1
-			return await self.execute_delete_emoji(command, options, scope)
-		elif command == "test_emoji":
-			scope.iter = scope.iter+1
-			return await self.execute_test_emoji(command, options, scope)
-		elif command == "emojis":
-			scope.iter = scope.iter+1
-			return await self.execute_emojis(command, options, scope)
-
-		return scope
+		await stream.finish()

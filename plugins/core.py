@@ -23,26 +23,269 @@ import argparse
 import re
 import discord
 import copy
+import inspect
+import datetime
+import praxisbot
 from io import StringIO
-from plugin import Plugin
-from scope import UserPermission
-from scope import ExecutionScope
-from scope import ExecutionBlock
 
-class CorePlugin(Plugin):
+class CorePlugin(praxisbot.Plugin):
 	"""
 	Core commands
 	"""
 
 	name = "Core"
 
-	def __init__(self, ctx, shell):
-		super().__init__(ctx)
+	def __init__(self, shell):
+		super().__init__(shell)
 
-		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"variables(id INTEGER PRIMARY KEY, discord_sid INTEGER, name TEXT, value TEXT)");
+		self.shell.create_sql_table("variables", ["id INTEGER PRIMARY KEY", "discord_sid INTEGER", "name TEXT", "value TEXT"])
 
-	async def execute_say(self, command, options, scope):
-		parser = argparse.ArgumentParser(description='Send a message.', prog=command)
+		self.add_command("help", self.execute_help)
+		self.add_command("say", self.execute_say)
+		self.add_command("if", self.execute_if)
+		self.add_command("set_variable", self.execute_set_variable)
+		self.add_command("variables", self.execute_variables)
+		self.add_command("change_roles", self.execute_change_roles)
+		self.add_command("set_command_prefix", self.execute_set_command_prefix)
+		self.add_command("script", self.execute_script)
+		self.add_command("exit", self.execute_exit)
+		self.add_command("for", self.execute_for)
+		self.add_command("regex", self.execute_regex)
+		self.add_command("whois", self.execute_whois)
+		self.add_command("delete_message", self.execute_delete_message)
+		self.add_command("silent", self.execute_silent)
+
+	@praxisbot.command
+	async def execute_help(self, scope, command, options, lines, **kwargs):
+		"""
+		Help page of PraxisBot.
+		"""
+
+		stream = praxisbot.MessageStream(scope)
+		for p in scope.shell.plugins:
+			await stream.send("\n**"+p.name+"**\n\n")
+			for c in p.cmds:
+				desc =	inspect.getdoc(p.cmds[c])
+				if desc:
+					await stream.send(" - `"+c+"` : "+desc+"\n")
+				else:
+					await stream.send(" - `"+c+"`\n")
+
+		await stream.finish()
+
+	@praxisbot.command
+	async def execute_script(self, scope, command, options, lines, **kwargs):
+		"""
+		Execute a list of commands.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		if len(lines) == 0:
+			await scope.shell.print_error(scope, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\nscript\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
+			return
+
+		subScope = scope.create_subscope()
+		subScope.prefixes = [""]
+		await scope.shell.execute_script(subScope, "\n".join(lines))
+		scope.continue_from_subscope(subScope)
+
+
+	@praxisbot.command
+	async def execute_exit(self, scope, command, options, lines, **kwargs):
+		"""
+		Stop the execution of the current script.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		scope.abort = True
+		return scope
+
+	@praxisbot.command
+	async def execute_if(self, scope, command, options, lines, **kwargs):
+		"""
+		Check conditions. Used with `else` and `endif`.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('firstvar', help='First values', metavar='VALUE')
+		parser.add_argument('--equal', help='Test if A = B', metavar='VALUE')
+		parser.add_argument('--hasroles', nargs='+', help='Test if a member has one of the listed roles', metavar='ROLE')
+		parser.add_argument('--ismember', action='store_true', help='Test if a parameter is a valid member')
+		parser.add_argument('--not', dest='inverse', action='store_true', help='Inverse the result of the test')
+		parser.add_argument('--find', help='Return truc if an occurence of B is found in A (case insensitive)')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		res = False
+		if args.equal:
+			a = scope.format_text(args.firstvar)
+			b = scope.format_text(args.equal)
+			res = (a == b)
+		elif args.find:
+			a = scope.format_text(args.firstvar).lower()
+			b = scope.format_text(args.find).lower()
+			res = (a.find(b) >= 0)
+		elif args.ismember:
+			u = shell.find_member(scope.format_text(args.firstvar), scope.server)
+			res = (u != None)
+		elif args.hasroles:
+			u = shell.find_member(scope.format_text(args.firstvar), scope.server)
+			r = []
+			for i in args.hasroles:
+				formatedRole = scope.format_text(i)
+				role = shell.find_role(formatedRole, scope.server)
+				if role:
+					r.append(role)
+			if u:
+				for i in u.roles:
+					for j in r:
+						if i.id == j.id:
+							res = True
+							break
+					if res:
+						break
+
+		if args.inverse:
+			res = not res
+
+		scope.blocks.append(praxisbot.ExecutionBlockIf(res))
+
+	@praxisbot.command
+	async def execute_for(self, scope, command, options, lines, **kwargs):
+		"""
+		Execute commands until condition. Used with `endfor`.
+		"""
+
+		for b in scope.blocks:
+			print(type(b).__name__)
+			if type(b).__name__ == "ExecutionBlockFor":
+				await scope.shell.print_error(scope, "Only one level of loop is allowed.")
+				scope.abort = True
+				return
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('name', help='Name of the iterator', metavar='VALUE')
+		parser.add_argument('--in', dest="list", nargs='+', help='List of elements', metavar='ELEMENT')
+		parser.add_argument('--inset', help='Name of a variable containing a set', metavar='VARIABLE')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		var = scope.format_text(args.name)
+		self.ensure_object_name("Variable name", var)
+
+		if args.list:
+			list = args.list
+		elif args.inset:
+			val = scope.vars[args.inset]
+			list = val.split("\n")
+		else:
+			list = []
+
+		scope.blocks.append(praxisbot.ExecutionBlockFor(var, list))
+
+	@praxisbot.command
+	async def execute_set_variable(self, scope, command, options, lines, **kwargs):
+		"""
+		Update local and global variables.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('name', help='Variable name')
+		parser.add_argument('value', help='Variable value')
+		parser.add_argument('--global', dest='glob', action='store_true', help='Set the variable for all commands on this server')
+		parser.add_argument('--intadd', action='store_true', help='Add the integer value to the variable')
+		parser.add_argument('--intremove', action='store_true', help='Remove the integer value from the variable')
+		parser.add_argument('--setadd', action='store_true', help='Add element in the set')
+		parser.add_argument('--setremove', action='store_true', help='Remove element from the set')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		if args.glob and scope.permission < praxisbot.UserPermission.Script:
+			raise praxisbot.ParameterPermissionError("--global")
+
+		var = scope.format_text(args.name)
+		self.ensure_object_name("Variable name", var)
+
+		val = scope.format_text(args.value)
+
+		if args.intadd:
+			try:
+				val = str(int(scope.vars[var]) + int(val))
+			except ValueError:
+				val = str(scope.vars[var])
+				pass
+		elif args.intremove:
+			try:
+				val = str(int(scope.vars[var]) - int(val))
+			except ValueError:
+				val = str(scope.vars[var])
+				pass
+		elif args.setadd:
+			try:
+				if var in scope.vars:
+					s = set(str(scope.vars[var]).split("\n"))
+					s.add(val)
+					val = "\n".join(s)
+			except ValueError:
+				val = str(scope.vars[var])
+				pass
+		elif args.setremove:
+			try:
+				if var in scope.vars:
+					s = set(str(scope.vars[var]).split("\n"))
+					s.discard(val)
+					val = "\n".join(s)
+			except ValueError:
+				val = str(scope.vars[var])
+				pass
+
+		scope.vars[var] = val
+
+		if args.glob:
+			scope.shell.set_sql_data("variables", {"discord_sid": int(scope.server.id), "name": str(var)}, {"value":str(val)})
+
+		await scope.shell.print_success(scope, "`"+str(var)+"` is now equal to:\n```"+str(val)+"```")
+
+
+	@praxisbot.command
+	async def execute_variables(self, scope, command, options, lines, **kwargs):
+		"""
+		List all current variables.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		stream = praxisbot.MessageStream(scope)
+		await stream.send("**List of variables**\n")
+		for v in scope.vars:
+			if scope.vars[v].find("\n") >= 0:
+				await stream.send("\n"+v+" = \n```"+scope.vars[v]+"```")
+			else:
+				await stream.send("\n"+v+" = `"+scope.vars[v]+"`")
+		await stream.finish()
+
+
+	@praxisbot.command
+	async def execute_say(self, scope, command, options, lines, **kwargs):
+		"""
+		Send a message.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('message', help='Text to send')
 		parser.add_argument('--channel', '-c', help='Channel where to send the message')
 		parser.add_argument('--title', '-t', help='Embed title')
@@ -50,264 +293,207 @@ class CorePlugin(Plugin):
 		parser.add_argument('--footer', '-f', help='Embed footer')
 		parser.add_argument('--image', '-i', help='Embed image')
 		parser.add_argument('--thumbnail', '-m', help='Embed thumbnail')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		args = await self.parse_options(scope.channel, parser, options)
+		if args.channel:
+			chan = scope.shell.find_channel(args.channel, scope.server)
+		else:
+			chan = scope.channel
 
-		if args:
-			subScope = copy.deepcopy(scope)
-			if args.channel:
-				c = self.ctx.find_channel(self.ctx.format_text(args.channel, scope), scope.server)
-				if c:
-					subScope.channel = c
+		if not chan:
+			await scope.shell.print_error(scope, "Unknown channel.")
+			return
 
-			formatedText = self.ctx.format_text(args.message, subScope)
+		if not chan.permissions_for(scope.user).send_messages:
+			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
+			return
 
-			e = None
-			if args.title or args.description or args.footer or args.image or args.thumbnail:
-				e = discord.Embed();
-				e.type = "rich"
-				if args.title:
-					e.title = self.ctx.format_text(args.title, subScope)
-				if args.description:
-					e.description = self.ctx.format_text(args.description, subScope)
-				if args.footer:
-					e.set_footer(text=self.ctx.format_text(args.footer, subScope))
-				if args.image:
-					e.set_image(url=self.ctx.format_text(args.image, subScope))
-				if args.thumbnail:
-					e.set_thumbnail(url=self.ctx.format_text(args.thumbnail, subScope))
+		subScope = scope.create_subscope()
+		subScope.channel = chan
 
-			await self.ctx.send_message(subScope.channel, formatedText, e)
+		formatedText = subScope.format_text(args.message)
 
-		return scope
+		e = None
+		if args.title or args.description or args.footer or args.image or args.thumbnail:
+			e = discord.Embed();
+			e.type = "rich"
+			if args.title:
+				e.title = subScope.format_text(args.title)
+			if args.description:
+				e.description = subScope.format_text(args.description)
+			if args.footer:
+				e.set_footer(text=subScope.format_text(args.footer))
+			if args.image:
+				e.set_image(url=subScope.format_text(args.image))
+			if args.thumbnail:
+				e.set_thumbnail(url=subScope.format_text(args.thumbnail))
 
-	async def execute_set_variable(self, command, options, scope):
-		parser = argparse.ArgumentParser(description='Set a variable.', prog=command)
-		parser.add_argument('name', help='Variable name')
-		parser.add_argument('value', help='Variable value')
-		parser.add_argument('--global', dest='glob', action='store_true', help='Set the variable for all commands on this server')
-		parser.add_argument('--intadd', action='store_true', help='Add the integer value to the variable')
+		await scope.shell.send_message(subScope.channel, formatedText, e)
 
-		args = await self.parse_options(scope.channel, parser, options)
+	@praxisbot.command
+	@praxisbot.permission_script
+	async def execute_change_roles(self, scope, command, options, lines, **kwargs):
+		"""
+		Change roles of a member.
+		"""
 
-		if args:
-			var = self.ctx.format_text(args.name, scope)
-			val = self.ctx.format_text(args.value, scope)
-			if not re.fullmatch('[a-zA-Z_][a-zA-Z0-9_]*', var):
-				await self.ctx.send_message(scope.channel, "Variables must be alphanumeric.")
-				return scope
-			if var in ["user", "channel", "server", "user_avatar", "user_time", "params", "n", "now"]:
-				await self.ctx.send_message(scope.channel, "This variable is reserved.")
-				return scope
-
-			if args.intadd:
-				try:
-					val = str(int(scope.vars[var]) + int(val))
-				except ValueError:
-					val = str(scope.vars[var])
-					pass
-
-			scope.vars[var] = val
-
-			if args.glob and scope.permission >= UserPermission.Script:
-				with self.ctx.dbcon:
-					c = self.ctx.dbcon.cursor()
-					c.execute("SELECT id FROM "+self.ctx.dbprefix+"variables WHERE discord_sid = ? AND name = ?", [int(scope.server.id), str(var)])
-					r = c.fetchone()
-					if r:
-						c.execute("UPDATE "+self.ctx.dbprefix+"variables SET value = ? WHERE id = ?", [str(val), int(r[0])])
-					else:
-						c.execute("INSERT INTO "+self.ctx.dbprefix+"variables (discord_sid, name, value) VALUES(?, ?, ?)", [int(scope.server.id), str(var), str(val)])
-
-		return scope
-
-	async def execute_if(self, command, options, scope):
-		parser = argparse.ArgumentParser(description='Perform tests. Don\'t forget to add an endif line.', prog=command)
-		parser.add_argument('firstvar', help='First values', metavar='VALUE')
-		parser.add_argument('--equal', help='Test if A = B', metavar='VALUE')
-		parser.add_argument('--hasroles', nargs='+', help='Test if a member has one of the listed roles', metavar='ROLE')
-		parser.add_argument('--ismember', action='store_true', help='Test if a parameter is a valid member')
-		parser.add_argument('--not', dest='inverse', action='store_true', help='Inverse the result of the test')
-		parser.add_argument('--find', help='Return truc if an occurence of B is found in A (case insensitive)')
-
-		args = await self.parse_options(scope.channel, parser, options)
-
-		if args:
-			res = False
-			if args.equal:
-				a = self.ctx.format_text(args.firstvar, scope)
-				b = self.ctx.format_text(args.equal, scope)
-				res = (a == b)
-			elif args.find:
-				a = self.ctx.format_text(args.firstvar, scope).lower()
-				b = self.ctx.format_text(args.find, scope).lower()
-				res = (a.find(b) >= 0)
-			elif args.ismember:
-				u = self.ctx.find_member(self.ctx.format_text(args.firstvar, scope), scope.server)
-				res = (u != None)
-			elif args.hasroles:
-				u = self.ctx.find_member(self.ctx.format_text(args.firstvar, scope), scope.server)
-				r = []
-				for i in args.hasroles:
-					formatedRole = self.ctx.format_text(i, scope)
-					role = self.ctx.find_role(formatedRole, scope.server)
-					if role:
-						r.append(role)
-				if u:
-					for i in u.roles:
-						for j in r:
-							if i.id == j.id:
-								res = True
-								break
-						if res:
-							break
-
-			if args.inverse:
-				res = not res
-
-			scope.blocks.append(ExecutionBlock("endif", "else", res))
-			return scope
-
-		return scope
-
-	async def execute_change_roles(self, command, options, scope):
-		if scope.permission < UserPermission.Script:
-			return scope
-
-		parser = argparse.ArgumentParser(description='Remove roles to a member.', prog=command)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('user', help='User name')
 		parser.add_argument('--add', nargs='*', help='A list of roles to add', default=[])
 		parser.add_argument('--remove', nargs='*', help='A list of roles to remove', default=[])
-		parser.add_argument('--silent', '-s', action='store_true',  help='Don\'t print messages')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		args = await self.parse_options(scope.channel, parser, options)
+		formatedUser = scope.format_text(args.user)
+		u = scope.shell.find_member(formatedUser, scope.server)
+		if not u:
+			await scope.shell.print_error(scope, "Member `"+formatedUser+"` not found.")
+			return
 
-		if args:
-			formatedUser = self.ctx.format_text(args.user, scope)
-			u = self.ctx.find_member(formatedUser, scope.server)
-			if not u:
-				await self.ctx.send_message(scope.channel, "Member `"+formatedUser+"` not found.")
-				return
+		rolesToAdd = []
+		rolesToRemove = []
+		for a in args.add:
+			formatedRole = scope.format_text(a)
+			role = scope.shell.find_role(formatedRole, scope.server)
+			if role:
+				rolesToAdd.append(role)
+		for a in args.remove:
+			formatedRole = scope.format_text(a)
+			role = scope.shell.find_role(formatedRole, scope.server)
+			if role:
+				rolesToRemove.append(role)
 
-			rolesToAdd = []
-			rolesToRemove = []
-			for a in args.add:
-				formatedRole = self.ctx.format_text(a, scope)
-				role = self.ctx.find_role(formatedRole, scope.server)
-				if role:
-					rolesToAdd.append(role)
-			for a in args.remove:
-				formatedRole = self.ctx.format_text(a, scope)
-				role = self.ctx.find_role(formatedRole, scope.server)
-				if role:
-					rolesToRemove.append(role)
+		res = await scope.shell.change_roles(u, rolesToAdd, rolesToRemove)
+		if not args.silent:
+			if res:
+				output = "The following roles has been changed from "+u.display_name+":"
+				for i in res[0]:
+					output = output + "\n + " + i.name
+				for i in res[1]:
+					output = output + "\n - " + i.name
+				await scope.shell.print_success(scope, output)
+			else:
+				await scope.shell.print_error(scope, "Roles can't be changed")
 
-			res = await self.ctx.change_roles(u, rolesToAdd, rolesToRemove)
-			if not args.silent:
-				if res:
-					output = "The following roles has been changed from "+u.display_name+":"
-					for i in res[0]:
-						output = output + "\n + " + i.name
-					for i in res[1]:
-						output = output + "\n - " + i.name
-					await self.ctx.send_message(scope.channel, output)
-				else:
-					await self.ctx.send_message(scope.channel, "Roles can't be changed")
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_set_command_prefix(self, scope, command, options, lines, **kwargs):
+		"""
+		Set the prefix used to send commands.
+		"""
 
-		return scope
-
-	async def execute_set_command_prefix(self, command, options, scope):
-		if scope.permission < UserPermission.Admin:
-			return scope
-
-		parser = argparse.ArgumentParser(description='Set the prefix used to write commands.', prog=command)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('prefix', help='Prefix')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		args = await self.parse_options(scope.channel, parser, options)
+		scope.shell.set_sql_data("servers", {"command_prefix": str(args.prefix)}, {"discord_sid": int(scope.server.id)}, "discord_sid")
+		await scope.shell.print_success(scope, "Command prefix changed to ``"+args.prefix+"``.")
 
-		if args:
-			if self.ctx.set_command_prefix(scope.server, args.prefix):
-				await self.ctx.send_message(scope.channel, "Command prefix changed to ``"+args.prefix+"``.")
-				return scope
+	@praxisbot.command
+	async def execute_regex(self, scope, command, options, lines, **kwargs):
+		"""
+		Extract data from a string using regular expression.
+		"""
 
-		await self.ctx.send_message(scope.channel, "Can't change the command prefix.")
-		return scope
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('regex', help='Regular expression')
+		parser.add_argument('data', help='Target string')
+		parser.add_argument('--output', help='Format of the output. Use {{result}}, {{result0}}, {{result1}}, ....', default="{{result}}")
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-	async def execute_script_cmd(self, shell, command, options, scope):
+		data = scope.format_text(args.data)
+		res = None
+		try:
+			res = re.search(args.regex, data)
+		except:
+			await scope.shell.print_error(scope, "The regular expression seems wrong.")
+			return
 
-		script = options.split("\n");
-		if len(script) > 0:
-			options = script[0]
-			script = script[1:]
+		if res:
+			scope.vars["result"] = res.group(0)
+			counter = 0
+			for g in res.groups():
+				scope.vars["result"+str(counter)] = g
+				counter = counter+1
+			if args.output and len(args.output)>0:
+				await scope.shell.print_info(scope, scope.format_text(args.output))
+		else:
+			await scope.shell.print_error(scope, "The regular expression didn't match anything.")
+			return
 
-		if len(script) == 0:
-			await self.ctx.send_message(scope.channel, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\nscript\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
-			return scope
+	@praxisbot.command
+	async def execute_whois(self, scope, command, options, lines, **kwargs):
+		"""
+		Get all available informations about an user.
+		"""
 
-		return await self.execute_script(shell, script, scope)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('user', help='An user')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-	async def execute_for_members(self, shell, command, options, scope):
+		u = scope.shell.find_member(scope.format_text(args.user), scope.server)
+		if not u:
+			await scope.shell.print_error(scope, "User not found. User name must be of the form `@User#1234` or `User#1234`.")
+			return
 
-		if scope.permission < UserPermission.Owner:
-			await self.ctx.send_message(scope.channel, "Only server owner can run this command.")
-			return scope
+		e = discord.Embed();
+		e.type = "rich"
+		e.title = u.name+"#"+u.discriminator
+		e.set_thumbnail(url=u.avatar_url.replace(".webp", ".png"))
 
-		subScope = copy.deepcopy(scope)
-		subScope.level = subScope.level+1
-		for m in scope.server.members:
-			if not m.bot:
-				subScope.vars["iter"] = m.mention
-				c = options.strip().split(" ")
-				o = c[1:]
-				c = c[0]
-				subScope = await shell.execute_command(c, " ".join(o).replace("{{iter}}", m.name+"#"+m.discriminator), subScope)
+		e.add_field(name="Nickname", value=str(u.display_name))
+		e.add_field(name="Discord ID", value=str(u.id))
+		e.add_field(name="Created since", value=str(datetime.datetime.now() - u.created_at))
+		e.add_field(name="Joined since", value=str(datetime.datetime.now() - u.joined_at))
+		roles = []
+		for r in u.roles:
+			if not r.is_everyone:
+				roles.append(r.name)
+		e.add_field(name="Roles", value=", ".join(roles))
 
-		newScope = copy.deepcopy(subScope)
-		newScope.level = newScope.level-1
-		return newScope
+		profile = await scope.shell.client_human.get_user_profile(u.id)
 
-	async def execute_exit(self, shell, command, options, scope):
-		scope.abort = True
-		return scope
+		stream = praxisbot.MessageStream(scope)
+		for ca in profile.connected_accounts:
+			url = ca.url
+			if url:
+				e.add_field(name=ca.provider_name, value=url)
+			else:
+				e.add_field(name=ca.provider_name, value=ca.name)
 
-	async def dump(self, server):
-		text = []
+		await scope.shell.client.send_message(scope.channel, "", embed=e)
 
-		with self.ctx.dbcon:
-			c = self.ctx.dbcon.cursor()
-			for row in c.execute("SELECT name, value FROM "+self.ctx.dbprefix+"variables WHERE discord_sid = ? ORDER BY name", [int(server.id)]):
-				text.append("set_variable --global "+row[0]+" \""+row[0]+"\"")
+	@praxisbot.command
+	async def execute_delete_message(self, scope, command, options, lines, **kwargs):
+		"""
+		Delete the message that trigger the current execution.
+		"""
 
-		return text
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-	async def list_commands(self, server):
-		return ["say", "if", "set_variable", "change_roles", "set_command_prefix", "script", "exit", "for_members", "math"]
+		scope.deletecmd = True
 
-	async def execute_command(self, shell, command, options, scope):
+	@praxisbot.command
+	async def execute_silent(self, scope, command, options, lines, **kwargs):
+		"""
+		Don't print any feedback during execution.
+		"""
 
-		if command == "say":
-			scope.iter = scope.iter+1
-			return await self.execute_say(command, options, scope)
-		elif command == "if":
-			scope.iter = scope.iter+1
-			return await self.execute_if(command, options, scope)
-		elif command == "set_variable":
-			scope.iter = scope.iter+1
-			return await self.execute_set_variable(command, options, scope)
-		elif command == "change_roles":
-			scope.iter = scope.iter+1
-			return await self.execute_change_roles(command, options, scope)
-		elif command == "set_command_prefix":
-			scope.iter = scope.iter+1
-			return await self.execute_set_command_prefix(command, options, scope)
-		elif command == "script":
-			scope.iter = scope.iter+1
-			return await self.execute_script_cmd(shell, command, options, scope)
-		elif command == "exit":
-			scope.iter = scope.iter+1
-			return await self.execute_exit(shell, command, options, scope)
-		elif command == "for_members":
-			scope.iter = scope.iter+1
-			return await self.execute_for_members(shell, command, options, scope)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		return scope
+		scope.verbose = 0

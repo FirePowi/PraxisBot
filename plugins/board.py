@@ -23,24 +23,26 @@ import argparse
 import re
 import discord
 import traceback
+import praxisbot
 from io import StringIO
-from plugin import Plugin
-from scope import UserPermission
-from scope import ExecutionScope
-from scope import ExecutionBlock
 
-class BoardPlugin(Plugin):
+class BoardPlugin(praxisbot.Plugin):
 	"""
 	Board commands
 	"""
 
 	name = "Board"
 
-	def __init__(self, ctx, shell):
-		super().__init__(ctx)
+	def __init__(self, shell):
+		super().__init__(shell)
+
 		self.boardname_regex = re.compile('[a-zA-Z0-9_-]+')
 
-		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"boards(id INTEGER PRIMARY KEY, name TEXT, discord_sid INTEGER, discord_cid INTEGER, discord_mid INTEGER)");
+		self.shell.create_sql_table("boards", ["id INTEGER PRIMARY KEY", "name TEXT", "discord_sid INTEGER", "discord_cid INTEGER", "discord_mid INTEGER"])
+
+		self.add_command("create_board", self.execute_create_board)
+		self.add_command("edit_board", self.execute_edit_board)
+		self.add_command("delete_board", self.execute_delete_board)
 
 	def create_embed(self, boardname, author):
 		e = discord.Embed();
@@ -48,170 +50,135 @@ class BoardPlugin(Plugin):
 		e.set_footer(text="Last modification by "+author.display_name+". Use `edit_board "+boardname+"` to edit this board.")
 		return e
 
-	async def execute_create_board(self, command, options, scope):
-		content = options.split("\n");
-		options = content[0]
-		if len(content) == 1:
-			content = "A fresh shared board ! All members with write permission in this channel can edit it."
-		else:
-			content = "\n".join(content[1:])
+	@praxisbot.command
+	async def execute_create_board(self, scope, command, options, lines, **kwargs):
+		"""
+		Create a new board.
+		"""
 
-		parser = argparse.ArgumentParser(description='Create a new board.', prog=command)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('boardname', help='Name of the board')
 		parser.add_argument('--channel', '-c', help='Channel where the board will be.')
 		parser.add_argument('--content', help='Channel where the board will be.')
 		parser.add_argument('--format', action='store_true', help='Apply PraxisBot text formating.')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		args = await self.parse_options(scope.channel, parser, options)
+		boardname = scope.format_text(args.boardname)
+		self.ensure_object_name("Board name", boardname)
 
-		if args:
-			if args.content:
-				content = args.content
-
-			if args.format:
-				content = self.ctx.format_text(content, scope)
-
-			boardname = self.ctx.format_text(args.boardname, scope)
-
-			if not self.boardname_regex.fullmatch(boardname):
-				await self.ctx.send_message(scope.channel, "The board name must be alphanumeric")
-				return scope
-
-			chan = scope.channel
-			if args.channel:
-				c = self.ctx.find_channel(self.ctx.format_text(args.channel, scope), scope.server)
-				if c:
-					chan = c
-
-			if not chan.permissions_for(scope.user).send_messages:
-				await self.ctx.send_message(scope.channel, "You don't have write permission in this channel.")
-				return scope
-
-			with self.ctx.dbcon:
-				c = self.ctx.dbcon.cursor()
-				c.execute("SELECT id FROM "+self.ctx.dbprefix+"boards WHERE discord_sid = ? AND name = ?", [int(scope.server.id), str(boardname)])
-				r = c.fetchone()
-				if r:
-					await self.ctx.send_message(scope.channel, "The board `"+boardname+"` already exists.")
-					return scope
-
-			e = self.create_embed(boardname, scope.user);
-
-			try:
-				m = await self.ctx.send_message(chan, content, e)
-
-				with self.ctx.dbcon:
-					if not self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"boards (name, discord_sid, discord_cid, discord_mid) VALUES (?, ?, ?, ?)", [str(boardname), int(m.server.id), int(m.channel.id), int(m.id)]):
-						await self.ctx.send_message(scope.channel, "The board `"+boardname+"` can't be saved.")
-			except:
-				print(traceback.format_exc())
-				await self.ctx.send_message(scope.channel, "The board `"+boardname+"` can't be created in this channel.")
-
-		return scope
-
-	async def execute_delete_board(self, command, options, scope):
-
-		parser = argparse.ArgumentParser(description='Make a board no longer editable.', prog=command)
-		parser.add_argument('boardname', help='Name of the board')
-
-		args = await self.parse_options(scope.channel, parser, options)
-		if args:
-			boardname = self.ctx.format_text(args.boardname, scope)
-
-			if not self.boardname_regex.fullmatch(boardname):
-				await self.ctx.send_message(scope.channel, "The board name must be alphanumeric")
-				return scope
-
-			with self.ctx.dbcon:
-				c = self.ctx.dbcon.cursor()
-				c.execute("SELECT id, discord_cid FROM "+self.ctx.dbprefix+"boards WHERE discord_sid = ? AND name = ?", [int(scope.server.id), str(boardname)])
-				r = c.fetchone()
-				if r:
-					chan = self.ctx.find_channel("<#"+str(r[1])+">", scope.server)
-					if chan and not chan.permissions_for(scope.user).send_messages:
-						await self.ctx.send_message(scope.channel, "You don't have write permission in this channel.")
-						return scope
-
-					c.execute("DELETE FROM "+self.ctx.dbprefix+"boards WHERE id = ?", [r[0]])
-					await self.ctx.send_message(scope.channel, "Board `"+boardname+"` deleted.")
-					return scope
-
-			await self.ctx.send_message(scope.channel, "Board `"+boardname+"` not found.")
-		return scope
-
-	async def execute_edit_board(self, command, options, scope):
-
-		content = options.split("\n");
-		options = content[0]
-		if len(content) > 1:
-			content = "\n".join(content[1:])
+		if args.channel:
+			chan = scope.shell.find_channel(args.channel, scope.server)
 		else:
-			content = None
-		parser = argparse.ArgumentParser(description='Edit a board. Wirte the content of the board in the second line', prog=command)
+			chan = scope.channel
+
+		if not chan:
+			await scope.shell.print_error(scope, "Unknown channel.")
+			return
+
+		if not chan.permissions_for(scope.user).send_messages:
+			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
+			return
+
+		boardId = scope.shell.get_sql_data("boards", ["id"], {"discord_sid": int(scope.server.id), "name": str(boardname)})
+		if boardId:
+			await scope.shell.print_error(scope, "The board `"+boardname+"` already exists.")
+			return
+
+		if args.content:
+			content = args.content
+		elif len(lines) > 0:
+			content = "\n".join(lines)
+		else:
+			content = "A fresh shared board ! All members with write permission in this channel can edit it."
+
+		if args.format:
+			content = scope.format_text(content)
+
+		e = self.create_embed(boardname, scope.user);
+		m = await scope.shell.client.send_message(chan, content, embed=e)
+		scope.shell.set_sql_data("boards", {"discord_cid": int(m.channel.id), "discord_mid": int(m.id)}, {"discord_sid": int(m.server.id), "name": str(boardname)})
+
+	@praxisbot.command
+	async def execute_delete_board(self, scope, command, options, lines, **kwargs):
+		"""
+		Make a board no longer editable.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('boardname', help='Name of the board')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		boardname = scope.format_text(args.boardname)
+		self.ensure_object_name("Board name", boardname)
+
+		board = scope.shell.get_sql_data("boards", ["id", "discord_cid", "discord_mid"], {"discord_sid": int(scope.server.id), "name": str(boardname)})
+		if not board:
+			await scope.shell.print_error(scope, "Board `"+boardname+"` not found.")
+			return
+
+		chan = scope.shell.find_channel(str(board[1]), scope.server)
+		if chan and not chan.permissions_for(scope.user).send_messages:
+			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
+			return
+
+		scope.shell.delete_sql_data("boards", {"id": board[0]})
+
+		await scope.shell.print_success(scope, "Board `"+boardname+"` deleted.")
+
+	@praxisbot.command
+	async def execute_edit_board(self, scope, command, options, lines, **kwargs):
+		"""
+		Edit a board. Content of the board must be written in the second line, or with the parameter --content.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('boardname', help='Name of the board')
 		parser.add_argument('--content', help='Channel where the board will be.')
 		parser.add_argument('--format', action='store_true', help='Apply PraxisBot text formating.')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		args = await self.parse_options(scope.channel, parser, options)
+		boardname = scope.format_text(args.boardname)
+		self.ensure_object_name("Board name", boardname)
 
-		if args:
-			if args.content:
-				content = args.content
-			elif not content:
-				await self.ctx.send_message(scope.channel, "You must write a content in the second line. Ex.: ```\n"+command+options+"\nMy message.```")
-				return scope
+		board = scope.shell.get_sql_data("boards", ["id", "discord_cid", "discord_mid"], {"discord_sid": int(scope.server.id), "name": str(boardname)})
+		if not board:
+			await scope.shell.print_error(scope, "Board `"+boardname+"` not found.")
+			return
 
-			if args.format:
-				content = self.ctx.format_text(content, scope)
+		chan = scope.shell.find_channel(str(board[1]), scope.server)
+		if not chan:
+			await scope.shell.print_error(scope, "The channel associated with this board is not accessible.")
+			return
+		if not chan.permissions_for(scope.user).send_messages:
+			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
+			return
 
-			boardname = self.ctx.format_text(args.boardname, scope)
+		m = None
+		try:
+			m = await scope.shell.client.get_message(chan, str(board[2]))
+		except:
+			pass
+		if not m:
+			await scope.shell.print_error(scope, "The message associated with this board is not accessible.")
+			return scope
 
-			if not self.boardname_regex.fullmatch(boardname):
-				await self.ctx.send_message(scope.channel, "The board name must be alphanumeric")
-				return scope
+		if args.content:
+			content = args.content
+		elif len(lines) > 0:
+			content = "\n".join(lines)
+		else:
+			content = ""
 
-			with self.ctx.dbcon:
-				c = self.ctx.dbcon.cursor()
-				c.execute("SELECT discord_cid, discord_mid FROM "+self.ctx.dbprefix+"boards WHERE discord_sid = ? AND name = ?", [int(scope.server.id), str(boardname)])
-				r = c.fetchone()
-				if r:
-					chan = self.ctx.find_channel("<#"+str(r[0])+">", scope.server)
-					if not chan:
-						await self.ctx.send_message(scope.channel, "The channel associated with this board is not accessible.")
-						return scope
+		if args.format:
+			content = scope.format_text(content)
 
-					if not chan.permissions_for(scope.user).send_messages:
-						await self.ctx.send_message(scope.channel, "You don't have write permission in this channel.")
-						return scope
+		e = self.create_embed(boardname, scope.user);
+		await scope.shell.client.edit_message(m, content, embed=e)
 
-					m = None
-					try:
-						m = await self.ctx.client.get_message(chan, str(r[1]))
-					except:
-						pass
-					if not m:
-						await self.ctx.send_message(scope.channel, "The message associated with this board is not accessible.")
-						return scope
-
-					e = self.create_embed(args.boardname, scope.user);
-					await self.ctx.client.edit_message(m, content, embed=e)
-					return scope
-
-			await self.ctx.send_message(scope.channel, "Board `"+boardname+"` not found.")
-		return scope
-
-	async def list_commands(self, server):
-		return ["create_board", "edit_board", "delete_board"]
-
-	async def execute_command(self, shell, command, options, scope):
-		if command == "create_board":
-			scope.iter = scope.iter+1
-			return await self.execute_create_board(command, options, scope)
-		if command == "edit_board":
-			scope.iter = scope.iter+1
-			return await self.execute_edit_board(command, options, scope)
-		if command == "delete_board":
-			scope.iter = scope.iter+1
-			return await self.execute_delete_board(command, options, scope)
-
-		return scope
+		await scope.shell.print_success(scope, "Board `"+boardname+"` edited.")

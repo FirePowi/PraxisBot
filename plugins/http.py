@@ -24,239 +24,209 @@ import re
 import requests
 import traceback
 import io
-from plugin import Plugin
-from scope import UserPermission
-from scope import ExecutionScope
-from scope import ExecutionBlock
+import praxisbot
 
-class HTTPPlugin(Plugin):
+class HTTPPlugin(praxisbot.Plugin):
 	"""
 	HTTP commands
 	"""
 
 	name = "HTTP"
 
-	def __init__(self, ctx, shell):
-		super().__init__(ctx)
+	def __init__(self, shell):
+		super().__init__(shell)
 
 		self.cookiename_regex = re.compile('[a-zA-Z0-9_-]+')
 
-		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"cookies(id INTEGER PRIMARY KEY, nameid TEXT, discord_sid INTEGER, name TEXT, content TEXT, filter TEXT)");
+		self.shell.create_sql_table("cookies", ["id INTEGER PRIMARY KEY", "nameid TEXT", "discord_sid INTEGER", "name TEXT", "content TEXT", "filter TEXT"])
 
-	async def execute_add_cookie(self, command, options, scope):
+		self.add_command("if_http", self.execute_if_http)
+		self.add_command("parse_http", self.execute_parse_http)
+		self.add_command("create_cookie", self.execute_create_cookie)
+		self.add_command("cookies", self.execute_cookies)
+		self.add_command("download", self.execute_download)
+
+	@praxisbot.command
+	async def execute_create_cookie(self, scope, command, options, lines, **kwargs):
+		"""
+		Create a cookie for HTTP requests.
+		"""
+
 		scope.deletecmd = True
 
-		if scope.permission < UserPermission.Admin:
-			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
-			return scope
-
-		content = options.split("\n");
-		if len(content) > 1:
-			options = content[0]
-			content = content[1:]
-		else:
-			await self.ctx.send_message(scope.channel, "Missing cookie content. Please write the content in the same message, just the line after the command. Ex.:```\nadd_cookie my_new_cookie\nCONTENT\"```")
-
-		parser = argparse.ArgumentParser(description='Add a cookie for HTTP requests.', prog=command)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('id', help='ID of the cookie. This ID is used to delete the cookie.')
 		parser.add_argument('name', help='Name of the cookie.')
 		parser.add_argument('filter', help='Regular expression that restrict usage of the cookie.')
-
-		args = await self.parse_options(scope.channel, parser, options)
-
+		args = await self.parse_options(scope, parser, options)
 		if not args:
-			return scope
+			return
 
-		if not self.cookiename_regex.fullmatch(args.id):
-			await self.ctx.send_message(scope.channel, "The cookie ID must be alphanumeric")
-			return scope
+		if len(lines) == 0:
+			await self.shell.print_error(scope, "Missing cookie content. Please write the content in the same message, just the line after the command. Ex.:```\nadd_cookie my_new_cookie\nCONTENT\"```")
+			return
 
-		try:
-			with self.ctx.dbcon:
-				c = self.ctx.dbcon.cursor()
-				c.execute("SELECT id FROM "+self.ctx.dbprefix+"cookies WHERE discord_sid = ? AND nameid = ?", [int(scope.server.id), str(args.id)])
-				r = c.fetchone()
-				if r:
-					await self.ctx.send_message(scope.channel, "The cookie `"+args.id+"` already exists.")
-					return scope
+		self.ensure_object_name("Cookie ID", args.id)
 
-				if not self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"cookies (nameid, name, discord_sid, content, filter) VALUES (?, ?, ?, ?, ?)", [str(args.id), str(args.name), int(scope.server.id), str(content), str(args.filter)]):
-					await self.ctx.send_message(scope.channel, "The cookie `"+args.id+"` can't be created.")
-		except:
-			await self.ctx.send_message(scope.channel, "The cookie `"+args.name+"` can't be created.")
+		cookieID = scope.shell.get_sql_data("cookies", ["id"], {"discord_sid": int(scope.server.id), "nameid": str(args.id)})
+		if cookieID:
+			await scope.shell.print_error(scope, "The cookie `"+str(args.id)+"` already exists.")
+			return
 
-		return scope
+		scope.shell.set_sql_data("cookies", {"name": str(args.name), "content": str("\n".join(lines)), "filter": str(args.filter)}, {"discord_sid": int(scope.server.id), "nameid": str(args.id)})
+		await scope.shell.print_success(scope, "Cookie `"+str(args.id)+"` added.")
 
-	async def execute_cookies(self, command, options, scope):
-		if scope.permission < UserPermission.Admin:
-			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
-			return scope
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_cookies(self, scope, command, options, lines, **kwargs):
+		"""
+		List all cookies.
+		"""
 
-		text = "**List of HTTP cookies**\n"
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		with self.ctx.dbcon:
-			c = self.ctx.dbcon.cursor()
-			for row in c.execute("SELECT nameid FROM "+self.ctx.dbprefix+"cookies WHERE discord_sid = ? ORDER BY name", [int(scope.server.id)]):
-				text = text+"\n - "+row[0]
+		stream = praxisbot.MessageStream(scope)
+		await stream.send("**List of HTTP cookies**\n")
 
-		await self.ctx.send_message(scope.channel, text)
+		with scope.shell.dbcon:
+			c = scope.shell.dbcon.cursor()
+			for row in c.execute("SELECT nameid, filter FROM "+scope.shell.dbtable("cookies")+" WHERE discord_sid = ? ORDER BY name", [int(scope.server.id)]):
+				await stream.send("\n - "+row[0]+": `"+row[1]+"`")
 
-		return scope
+		await stream.finish()
 
-	async def execute_if_http(self, command, options, scope):
-		if scope.permission < UserPermission.Script:
-			await self.ctx.send_message(scope.channel, "Only scripts can use this command.")
-			return scope
+	@praxisbot.command
+	@praxisbot.permission_script
+	async def execute_if_http(self, scope, command, options, lines, **kwargs):
+		"""
+		Perform tests on URLs. Used with `endif`.
+		"""
 
-		parser = argparse.ArgumentParser(description='Perform tests on URLs. Don\'t forget to add an endif line.', prog=command)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('url', help='First values', metavar='VALUE')
 		parser.add_argument('--valid', action='store_true', help='Test if the URL is valid.')
 		parser.add_argument('--not', dest='inverse', action='store_true', help='Inverse the result of the test')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		args = await self.parse_options(scope.channel, parser, options)
 
-		if args:
-			res = False
-			if args.valid:
-				url = self.ctx.format_text(args.url, scope)
-				httpResult = requests.head(url, allow_redirects=True)
-				res = httpResult.ok
-			if args.inverse:
-				res = not res
+		res = False
+		if args.valid:
+			url = scope.format_text(args.url)
+			httpResult = requests.head(url, allow_redirects=True)
+			res = httpResult.ok
 
-			scope.blocks.append(ExecutionBlock("endif", "else", res))
-			return scope
+		if args.inverse:
+			res = not res
 
-		return scope
+		scope.blocks.append(praxisbot.ExecutionBlockIf(res))
 
-	async def execute_download(self, command, options, scope):
-		if scope.permission < UserPermission.Script:
-			await self.ctx.send_message(scope.channel, "Only scripts can use this command.")
-			return scope
+	@praxisbot.command
+	@praxisbot.permission_script
+	async def execute_download(self, scope, command, options, lines, **kwargs):
+		"""
+		Download from an URL.
+		"""
 
-		parser = argparse.ArgumentParser(description='Download from an URL.', prog=command)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('url', help='URL to download')
 		parser.add_argument('filename', help='Filename sent in Discord')
 		parser.add_argument('--cookie', help='Name of a cookie to send with the request.')
-
-		args = await self.parse_options(scope.channel, parser, options)
-
+		args = await self.parse_options(scope, parser, options)
 		if not args:
-			return scope
+			return
 
-		url = self.ctx.format_text(args.url, scope)
+		url = scope.format_text(args.url)
 		result = None
-		try:
-			cookies = {}
-			if args.cookie:
-				with self.ctx.dbcon:
-					c = self.ctx.dbcon.cursor()
-					c.execute("SELECT name, content, filter FROM "+self.ctx.dbprefix+"cookies WHERE discord_sid = ? AND nameid = ?", [int(scope.server.id), str(args.cookie)])
-					row = c.fetchone()
-					if row:
-						if re.fullmatch(row[2], url):
-							cookies[row[0]] = row[1]
-						else:
-							await self.ctx.send_message(scope.channel, "This cookie can't be used with this URL.")
+		cookies = {}
+		if args.cookie:
+			cookieData = scope.shell.get_sql_data("cookies", ["name", "content", "filter"], {"discord_sid": int(scope.server.id), "nameid": str(args.cookie)})
+			if not cookieData:
+				await scope.shell.print_error(scope, "Cookie `"+args.cookie+"` not found.")
+				return
+			if not re.fullmatch(cookieData[2], url):
+				await scope.shell.print_error(scope, "This cookie can't be used with this URL.")
+				return
 
+			cookies[cookieData[0]] = cookieData[1]
+
+		try:
 			result = requests.get(url, allow_redirects=True, cookies=cookies, stream=True)
 			if not result.ok:
-				await self.ctx.send_message(scope.channel, "The page `"+url+"` can't be loaded ("+result.status_code+").")
-				return scope
+				result = None
 
 		except:
-			print(traceback.format_exc())
-			await self.ctx.send_message(scope.channel, "The page `"+url+"` can't be loaded.")
-			return scope
+			result = None
 
 		if not result:
-			await self.ctx.send_message(scope.channel, "The page `"+url+"` can't be loaded.")
-			return scope
+			await scope.shell.print_error(scope, "The page `"+url+"` can't be loaded.")
+			return
 
 		f = io.BytesIO(result.content)
-		await self.ctx.client.send_file(scope.channel, f, filename=args.filename)
+		await scope.shell.client.send_file(scope.channel, f, filename=args.filename)
 		f.close()
 
-		return scope
+	@praxisbot.command
+	@praxisbot.permission_script
+	async def execute_parse_http(self, scope, command, options, lines, **kwargs):
+		"""
+		Download and parse using REGEX from an URL.
+		"""
 
-	async def execute_parse_http(self, command, options, scope):
-		if scope.permission < UserPermission.Script:
-			await self.ctx.send_message(scope.channel, "Only scripts can use this command.")
-			return scope
-
-		parser = argparse.ArgumentParser(description='Download and parse using REGEX from an URL.', prog=command)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('url', help='URL to download')
 		parser.add_argument('regex', help='Regular expression to apply on the downloaded file.')
-		parser.add_argument('--group', help='Group of the regular expression to return. Must be a number.', default=0)
-		parser.add_argument('--output', help='Format of the output. Use {{result}} to get the groups.', default="{{result}}")
+		parser.add_argument('--output', help='Format of the output. Use {{result}}, {{result0}}, {{result1}}, ....', default="{{result}}")
 		parser.add_argument('--cookie', help='Name of a cookie to send with the request.')
-
-		args = await self.parse_options(scope.channel, parser, options)
-
+		args = await self.parse_options(scope, parser, options)
 		if not args:
-			return scope
+			return
 
-		url = self.ctx.format_text(args.url, scope)
+		url = scope.format_text(args.url)
 		result = None
-		try:
-			cookies = {}
-			if args.cookie:
-				with self.ctx.dbcon:
-					c = self.ctx.dbcon.cursor()
-					c.execute("SELECT name, content, filter FROM "+self.ctx.dbprefix+"cookies WHERE discord_sid = ? AND nameid = ?", [int(scope.server.id), str(args.cookie)])
-					row = c.fetchone()
-					if row:
-						if re.fullmatch(row[2], url):
-							cookies[row[0]] = row[1]
-						else:
-							await self.ctx.send_message(scope.channel, "This cookie can't be used with this URL.")
+		cookies = {}
+		if args.cookie:
+			cookieData = scope.shell.get_sql_data("cookies", ["name", "content", "filter"], {"discord_sid": int(scope.server.id), "nameid": str(args.cookie)})
+			if not cookieData:
+				await scope.shell.print_error(scope, "Cookie `"+args.cookie+"` not found.")
+				return
+			if not re.fullmatch(cookieData[2], url):
+				await scope.shell.print_error(scope, "This cookie can't be used with this URL.")
+				return
 
+			cookies[cookieData[0]] = cookieData[1]
+
+		try:
 			result = requests.get(url, allow_redirects=True, cookies=cookies)
 			if not result.ok:
-				await self.ctx.send_message(scope.channel, "The page `"+url+"` can't be loaded ("+result.status_code+").")
-				return scope
+				result = None
 
 		except:
-			print(traceback.format_exc())
-			await self.ctx.send_message(scope.channel, "The page `"+url+"` can't be loaded.")
-			return scope
+			result = None
 
 		if not result:
-			await self.ctx.send_message(scope.channel, "The page `"+url+"` can't be loaded.")
-			return scope
+			await scope.shell.print_error(scope, "The page `"+url+"` can't be loaded.")
+			return
 
+		res = None
 		try:
 			res = re.search(args.regex, result.text)
-			if res:
-				scope.vars["result"] = res.group(int(args.group))
-				if args.output and len(args.output)>0:
-					await self.ctx.send_message(scope.channel, self.ctx.format_text(args.output, scope))
-			else:
-				await self.ctx.send_message(scope.channel, "The regular expression didn't match anything.")
 		except:
-			await self.ctx.send_message(scope.channel, "The page `"+url+"` can't be parsed.")
-			return scope
+			await scope.shell.print_error(scope, "The regular expression seems wrong.")
+			return
 
-		return scope
-
-	async def list_commands(self, server):
-		return ["if_http", "parse_http", "add_cookie", "cookies", "download"]
-
-	async def execute_command(self, shell, command, options, scope):
-		if command == "if_http":
-			scope.iter = scope.iter+1
-			return await self.execute_if_http(command, options, scope)
-		elif command == "parse_http":
-			scope.iter = scope.iter+1
-			return await self.execute_parse_http(command, options, scope)
-		elif command == "add_cookie":
-			scope.iter = scope.iter+1
-			return await self.execute_add_cookie(command, options, scope)
-		elif command == "cookies":
-			scope.iter = scope.iter+1
-			return await self.execute_cookies(command, options, scope)
-		elif command == "download":
-			scope.iter = scope.iter+1
-			return await self.execute_download(command, options, scope)
-
-		return scope
+		if res:
+			scope.vars["result"] = res.group(0)
+			counter = 0
+			for g in res.groups():
+				scope.vars["result"+str(counter)] = g
+				counter = counter+1
+			if args.output and len(args.output)>0:
+				await scope.shell.print_info(scope, scope.format_text(args.output))
+		else:
+			await scope.shell.print_error(scope, "The regular expression didn't match anything.")
+			return

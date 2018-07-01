@@ -24,352 +24,271 @@ import re
 import asyncio
 import datetime
 import copy
-from io import StringIO
-from plugin import Plugin
-from scope import UserPermission
-from scope import ExecutionScope
-from scope import ExecutionBlock
+import io
+from pytz import timezone
+import praxisbot
 
-class TimeTrigger:
-	def __init__(self, shell, serverid, script, start_time, num_iterations):
-		self.shell = shell
-		self.serverid = serverid
-		self.start_time = start_time
-		self.num_iterations = num_iterations
-		self.script = script
-
-class TriggerPlugin(Plugin):
+class TriggerPlugin(praxisbot.Plugin):
 	"""
 	Trigger commands
 	"""
 
 	name = "Trigger"
 
-	def __init__(self, ctx, shell):
-		super().__init__(ctx)
-		self.command_regex = re.compile('[a-zA-Z0-9_-]+')
-
-		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"triggers(id INTEGER PRIMARY KEY, discord_sid INTEGER, command TEXT, script TEXT)");
-		self.ctx.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.ctx.dbprefix+"time_triggers(id INTEGER PRIMARY KEY, discord_sid INTEGER, script TEXT, start_time DATETIME, num_iterations INTEGER)");
+	def __init__(self, shell):
+		super().__init__(shell)
 
 		self.time_triggers = {}
-		c = self.ctx.dbcon.cursor()
-		for row in c.execute("SELECT discord_sid, id, script, start_time as 'start_time_ [timestamp]', num_iterations FROM "+self.ctx.dbprefix+"time_triggers"):
-			server = self.ctx.find_server(str(row[0]))
-			if server:
-				self.add_time_trigger(shell, server, row[1], row[2], row[3], row[4])
 
-	async def execute_time_trigger(self, id):
-		if id not in self.time_triggers:
-			return
+		self.shell.create_sql_table("triggers", ["id INTEGER PRIMARY KEY", "discord_sid INTEGER", "command TEXT", "script TEXT"])
+		self.shell.create_sql_table("time_triggers", ["id INTEGER PRIMARY KEY", "discord_sid INTEGER", "script TEXT", "start_time DATETIME", "num_iterations INTEGER"])
 
-		num_iterations = self.time_triggers[id].num_iterations -1
+		self.add_command("create_trigger", self.execute_create_trigger)
+		self.add_command("edit_trigger", self.execute_edit_trigger)
+		self.add_command("delete_trigger", self.execute_delete_trigger)
+		self.add_command("show_trigger", self.execute_show_trigger)
+		self.add_command("time_triggers", self.execute_time_triggers)
+		self.add_command("create_time_trigger", self.execute_create_time_trigger)
+		self.add_command("commands", self.execute_commands)
 
-		server = self.ctx.find_server(self.time_triggers[id].serverid)
-		if not server:
-			return
+	async def execute_unregistered_command(self, scope, command, options, lines):
+		return await self.execute_trigger_script(scope, command, options, lines)
 
-		scope = ExecutionScope()
-		scope.server = server
-		scope.channel = self.ctx.get_default_channel(server)
-		scope.user = server.me
-		scope.permission = UserPermission.Script
+	async def on_loop(self, scope):
 
-		script = self.time_triggers[id].script.split("\n");
-		await self.execute_script(self.time_triggers[id].shell, script, scope)
+		triggersToUpdate = {}
 
-		self.time_triggers[id].num_iterations = num_iterations
+		c = scope.shell.dbcon.cursor()
+		for row in c.execute("SELECT id, script, num_iterations, start_time, datetime('now') FROM "+scope.shell.dbtable("time_triggers")+" WHERE discord_sid = ? AND start_time < datetime('now')", [int(scope.server.id)]):
+			triggersToUpdate[row[0]] = row[2]
 
-		if num_iterations <= 0:
-			del(self.time_triggers[id])
-			with self.ctx.dbcon:
-				c = self.ctx.dbcon.cursor()
-				self.ctx.dbcon.execute("DELETE FROM "+self.ctx.dbprefix+"time_triggers WHERE id = ?", [id])
+			subScope = scope.create_subscope()
+			subScope.prefixes = [""]
+			await scope.shell.execute_script(subScope, row[1])
 
 
-	def add_time_trigger(self, shell, server, id, script, start_time, num_iterations):
-		self.time_triggers[id] = TimeTrigger(shell, server.id, script, start_time, num_iterations)
+		for t in triggersToUpdate:
+			if triggersToUpdate[t] <= 1:
+				scope.shell.delete_sql_data("time_triggers", {"id": t})
+			else:
+				scope.shell.update_sql_data("time_triggers", {"num_iterations": int(triggersToUpdate[t]-1)}, {"id": t})
 
-		def send():
-			asyncio.ensure_future(self.execute_time_trigger(id), loop=self.ctx.client.loop)
+		return
 
-		delay = (start_time - datetime.datetime.now()).total_seconds()
-		self.ctx.client.loop.call_later(delay, send)
+	async def on_member_join(self, scope):
+		await self.execute_trigger_script(scope, "@join", "", [])
+		return True
 
-	async def get_trigger_script(self, command, server):
-		with self.ctx.dbcon:
-			c = self.ctx.dbcon.cursor()
-			c.execute("SELECT script FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ? AND command = ?", [int(server.id), command])
-			r = c.fetchone()
-			if r:
-				return r[0]
+	async def on_member_leave(self, scope):
+		await self.execute_trigger_script(scope, "@leave", "", [])
+		return True
 
-		return None
+	async def on_ban(self, scope):
+		await self.execute_trigger_script(scope, "@ban", "", [])
+		return True
 
-	async def execute_trigger_script(self, shell, command, param, scope):
-		script = None
+	async def on_unban(self, scope):
+		await self.execute_trigger_script(scope, "@unban", "", [])
+		return True
 
-		with self.ctx.dbcon:
-			c = self.ctx.dbcon.cursor()
-			c.execute("SELECT script FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ? AND command = ?", [int(scope.server.id), command])
-			r = c.fetchone()
-			if r:
-				script = r[0]
+	async def execute_trigger_script(self, scope, command, options, lines, **kwargs):
+		script = scope.shell.get_sql_data("triggers", ["script"], {"discord_sid":int(scope.server.id), "command":command})
+		if not script:
+			return False
 
-		if script:
-			script = script.split("\n");
-			subScope = copy.deepcopy(scope)
-			subScope.permission = UserPermission.Script
-			subScope.vars["params"] = param.strip()
-			return await self.execute_script(shell, script, subScope)
-		return scope
+		subScope = scope.create_subscope()
+		subScope.prefixes = [""]
+		await scope.shell.execute_script(subScope, script[0])
+		scope.continue_from_subscope(subScope)
+		return True
 
-	#Command Add Trigger
-	async def execute_create_trigger(self, command, options, scope):
-		if scope.permission < UserPermission.Admin:
-			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
-			return scope
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_create_trigger(self, scope, command, options, lines, **kwargs):
+		"""
+		Associate a script to a trigger. The script must be written on the line after the command.
+		"""
 
-		script = options.split("\n");
-		if len(script) > 0:
-			options = script[0]
-			script = script[1:]
-
-		parser = argparse.ArgumentParser(description='Associate a script to a trigger. The script must be written on the line after the command.', prog=command)
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('command', help='Name of the trigger')
 		parser.add_argument('--force', '-f', action='store_true', help='Replace the trigger if it already exists')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		args = await self.parse_options(scope.channel, parser, options)
+		if len(lines) == 0:
+			await scope.shell.print_error(scope, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\ncreate_trigger my_new_command\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
+			return
 
-		if args:
-			if len(script) == 0:
-				await self.ctx.send_message(scope.channel, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\nadd_trigger my_new_command\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
-				return scope
+		if args.command not in ["@join", "@leave", "@ban", "@unban"]:
+			self.ensure_object_name("Command name", args.command)
 
-			#Check if the command is valid
-			if not (self.command_regex.fullmatch(args.command)) and (args.command not in ["@join", "@leave", "@ban", "@unban"]):
-				await self.ctx.send_message(scope.channel, "The command `"+args.command+"` is not alphanumeric")
-				return scope
+		trigger = scope.shell.get_sql_data("triggers", ["id"], {"discord_sid":int(scope.server.id), "command":str(args.command)})
+		if trigger and not args.force:
+			await scope.shell.print_error(scope, "Trigger `"+args.command+"` already exists. Please use --force to replace it.")
+			return
 
-			#Process
-			command_chk = await self.get_trigger_script(args.command, scope.server)
-			if command_chk:
-				if args.force:
-					with self.ctx.dbcon:
-						if self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"triggers SET script = ? WHERE discord_sid = ? AND command = ?", [str("\n".join(script)), int(scope.server.id), str(args.command)]):
-							await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` edited.")
-						else:
-							await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` can't be edited (internal error).")
-				else:
-					await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` already exists. Please use --force to replace it.")
-			else:
-				with self.ctx.dbcon:
-					if self.ctx.dbcon.execute("INSERT INTO "+self.ctx.dbprefix+"triggers (discord_sid, command, script) VALUES (?, ?, ?)", [int(scope.server.id), str(args.command), str("\n".join(script))]):
-						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` created.")
-					else:
-						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` can't be created (internal error).")
+		scope.shell.set_sql_data("triggers", {"script": "\n".join(lines)}, {"discord_sid":int(scope.server.id), "command":str(args.command)})
+		if trigger:
+			await scope.shell.print_success(scope, "Trigger `"+args.command+"` edited.")
+		else:
+			await scope.shell.print_success(scope, "Trigger `"+args.command+"` created.")
 
-		return scope
+	@praxisbot.command
+	@praxisbot.permission_script
+	async def execute_create_time_trigger(self, scope, command, options, lines, **kwargs):
+		"""
+		Execute a script at a specified time.
+		"""
 
-	#Command Add Time Trigger
-	async def execute_create_time_trigger(self, shell, command, options, scope):
-		if scope.permission < UserPermission.Admin:
-			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
-			return scope
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('--time', help='Date and time. Must be in the format "YYYY-MM-DD HH-MM-SS".')
+		parser.add_argument('--command', help='Command to execute.')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		script = options.split("\n");
-		if len(script) > 0:
-			options = script[0]
-			script = script[1:]
+		if len(lines) == 0:
+			return
 
-		parser = argparse.ArgumentParser(description='Execute a script at a specified time.', prog=command)
-		parser.add_argument('--time', help='Date and time. Must be of the format "YYYY-MM-DD HH-MM-SS".')
+			await scope.shell.print_error(scope, "Time option not provided. Please use --time.")
+			return
 
-		args = await self.parse_options(scope.channel, parser, options)
-
-		if args:
-			if len(script) == 0:
-				await self.ctx.send_message(scope.channel, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\ncreate_time_trigger --time \"2018-06-19 20:01:56\"\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
-				return scope
-
-			#Check if the command is valid
-			if not args.time:
-				await self.ctx.send_message(scope.channel, "Time option not provided. Please use --time.")
-				return scope
-
-			num_iterations = 1
-			try:
+		num_iterations = 1
+		try:
+			if args.time:
 				start_time = datetime.datetime.strptime(args.time, "%Y-%m-%d %H:%M:%S")
-			except ValueError:
-				await self.ctx.send_message(scope.channel, "Date and time must be in the format \"yyyy-mm-dd HH:MM:SS\". Ex.: 2018-06-19 20:01:56.")
-				return scope
-
-			with self.ctx.dbcon:
-				c = self.ctx.dbcon.cursor()
-				if c.execute("INSERT INTO "+self.ctx.dbprefix+"time_triggers (discord_sid, script, start_time, num_iterations) VALUES (?, ?, ?, ?)", [int(scope.server.id), str("\n".join(script)), str(start_time), num_iterations]):
-					await self.ctx.send_message(scope.channel, "The script will be executed "+str(num_iterations)+" time at "+str(start_time)+".")
-					self.add_time_trigger(shell, scope.server, c.lastrowid, "\n".join(script), start_time, num_iterations)
-				else:
-					await self.ctx.send_message(scope.channel, "Time trigger can't be created (internal error).")
-
-		return scope
-
-	#Command Edit Trigger
-	async def execute_edit_trigger(self, command, options, scope):
-		if scope.permission < UserPermission.Admin:
-			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
-			return scope
-
-		script = options.split("\n");
-		if len(script) > 0:
-			options = script[0]
-			script = script[1:]
-
-		parser = argparse.ArgumentParser(description='Associate a script to a trigger. The script must be written on the line after the command.', prog=command)
-		parser.add_argument('command', help='Name of the trigger')
-
-		args = await self.parse_options(scope.channel, parser, options)
-
-		if args:
-			if len(script) == 0:
-				await self.ctx.send_message(scope.channel, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\nadd_trigger my_new_command\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
-				return scope
-
-			#Check if the command is valid
-			if not (self.command_regex.fullmatch(args.command)) and (args.command not in ["@join", "@leave", "@ban", "@unban"]):
-				await self.ctx.send_message(scope.channel, "The command `"+args.command+"` is not alphanumeric")
-				return scope
-
-			#Process
-			command_chk = await self.get_trigger_script(args.command, scope.server)
-			if command_chk:
-				with self.ctx.dbcon:
-					if self.ctx.dbcon.execute("UPDATE "+self.ctx.dbprefix+"triggers SET script = ? WHERE discord_sid = ? AND command = ?", [str("\n".join(script)), int(scope.server.id), str(args.command)]):
-						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` edited.")
-					else:
-						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` can't be edited (internal error).")
+				start_time = timezone('Europe/Paris').localize(start_time)
+				start_time = start_time.astimezone(timezone('UTC'))
 			else:
-				await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` is unknown.")
+				start_time = datetime.datetime.now(timezone('UTC'))
+		except ValueError:
+			await scope.shell.print_error(scope, "Date and time must be in the format \"yyyy-mm-dd HH:MM:SS\". Ex.: 2018-06-19 20:01:56.")
+			return
 
-		return scope
+		if args.command:
+			script = args.command
+		elif len(lines) > 0:
+			script = "\n".join(lines)
+		else:
+			await scope.shell.print_error(scope, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\ncreate_time_trigger --time \"2018-06-19 20:01:56\"\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
 
-	#Command Delete Trigger
-	async def execute_delete_trigger(self, command, options, scope):
-		if scope.permission < UserPermission.Admin:
-			await self.ctx.send_message(scope.channel, "Only admins can use this command.")
-			return scope
+		scope.shell.add_sql_data("time_triggers", {"discord_sid": int(scope.server.id), "script": script,  "start_time": str(start_time),  "num_iterations": num_iterations})
+		await scope.shell.print_success(scope, "The script will be executed "+str(num_iterations)+" time at "+str(start_time)+".")
 
-		parser = argparse.ArgumentParser(description='Delete a trigger.', prog=command)
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_edit_trigger(self, scope, command, options, lines, **kwargs):
+		"""
+		Edit the script associated to a trigger. The script must be written on the line after the command.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('command', help='Name of the trigger')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		args = await self.parse_options(scope.channel, parser, options)
+		if len(lines) == 0:
+			await scope.shell.print_error(scope, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\nedit_trigger my_new_command\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
+			return
 
-		if args:
-			#Process
-			command_chk = await self.get_trigger_script(args.command, scope.server)
-			if command_chk:
-				with self.ctx.dbcon:
-					if self.ctx.dbcon.execute("DELETE FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ? AND command = ?", [int(scope.server.id), str(args.command)]):
-						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` deleted.")
-					else:
-						await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` can't be deleted (internal error).")
-			else:
-				await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` is unknown.")
+		if args.command not in ["@join", "@leave", "@ban", "@unban"]:
+			self.ensure_object_name("Command name", args.command)
 
-		return scope
+		trigger = scope.shell.get_sql_data("triggers", ["id"], {"discord_sid":int(scope.server.id), "command":str(args.command)})
+		if not trigger:
+			await scope.shell.print_error(scope, "Trigger `"+args.command+"` not found.")
+			return
 
-	#Command Show Trigger
-	async def execute_show_trigger(self, command, options, scope):
-		parser = argparse.ArgumentParser(description='Show the script associated to a trigger.', prog=command)
+		scope.shell.set_sql_data("triggers", {"script": "\n".join(lines)}, {"id":trigger[0]})
+		await scope.shell.print_success(scope, "Trigger `"+args.command+"` edited.")
+
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_delete_trigger(self, scope, command, options, lines, **kwargs):
+		"""
+		Delete a trigger.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('command', help='Name of the trigger')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		args = await self.parse_options(scope.channel, parser, options)
+		if args.command not in ["@join", "@leave", "@ban", "@unban"]:
+			self.ensure_object_name("Command name", args.command)
 
-		if args:
-			#Process
-			command_chk = await self.get_trigger_script(args.command, scope.server)
-			if command_chk:
-				await self.ctx.send_message(scope.channel, "```"+command_chk+"```")
-			else:
-				await self.ctx.send_message(scope.channel, "Trigger `"+args.command+"` is unknown.")
+		trigger = scope.shell.get_sql_data("triggers", ["id"], {"discord_sid":int(scope.server.id), "command":str(args.command)})
+		if not trigger:
+			await scope.shell.print_error(scope, "Trigger `"+args.command+"` not found.")
+			return
 
-		return scope
+		scope.shell.delete_sql_data("triggers", {"id":trigger[0]})
+		await scope.shell.print_success(scope, "Trigger `"+args.command+"` deleted.")
 
-	#Command Delete Command
-	async def execute_delete_command(self, command, options, scope):
-		scope.deletecmd = True
-		return scope
+	@praxisbot.command
+	async def execute_show_trigger(self, scope, command, options, lines, **kwargs):
+		"""
+		Show the script associated to a trigger.
+		"""
 
-	#Command Triggers
-	async def execute_triggers(self, command, options, scope):
-		text = "**List of commands**\n"
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('command', help='Name of the trigger')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		with self.ctx.dbcon:
-			c = self.ctx.dbcon.cursor()
-			for row in c.execute("SELECT command FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ? ORDER BY command", [int(scope.server.id)]):
-				text = text+"\n - "+row[0]
+		if args.command not in ["@join", "@leave", "@ban", "@unban"]:
+			self.ensure_object_name("Command name", args.command)
 
-		await self.ctx.send_message(scope.channel, text)
+		trigger = scope.shell.get_sql_data("triggers", ["script"], {"discord_sid":int(scope.server.id), "command":str(args.command)})
+		if not trigger:
+			await scope.shell.print_error(scope, "Trigger `"+args.command+"` not found.")
+			return
 
-		return scope
+		await scope.shell.print_info(scope, "```"+trigger[0]+"```")
 
-	async def dump(self, server):
-		text = []
+	@praxisbot.command
+	async def execute_commands(self, scope, command, options, lines, **kwargs):
+		"""
+		List all custom commands.
+		"""
 
-		with self.ctx.dbcon:
-			c = self.ctx.dbcon.cursor()
-			for row in c.execute("SELECT command,script FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ? ORDER BY command", [int(server.id)]):
-				text.append("create_trigger -f "+row[0]+"\n"+row[1])
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-		return text
+		stream = praxisbot.MessageStream(scope)
+		await stream.send("**List of commands**\n")
 
-	async def list_commands(self, server):
-		res = ["create_trigger", "delete_trigger", "edit_trigger", "show_trigger"]
-		with self.ctx.dbcon:
-			c = self.ctx.dbcon.cursor()
-			for row in c.execute("SELECT command FROM "+self.ctx.dbprefix+"triggers WHERE discord_sid = ?", [int(server.id)]):
-				res.append(row[0])
-		return res
+		with scope.shell.dbcon:
+			c = scope.shell.dbcon.cursor()
+			for row in c.execute("SELECT command FROM "+scope.shell.dbtable("triggers")+" WHERE discord_sid = ? ORDER BY command", [int(scope.server.id)]):
+				if row[0].find("@") != 0:
+					await stream.send("\n - "+row[0])
 
-	async def execute_command(self, shell, command, options, scope):
-		if command == "create_trigger":
-			scope.iter = scope.iter+1
-			return await self.execute_create_trigger(command, options, scope)
-		elif command == "edit_trigger":
-			scope.iter = scope.iter+1
-			return await self.execute_edit_trigger(command, options, scope)
-		elif command == "delete_trigger":
-			scope.iter = scope.iter+1
-			return await self.execute_delete_trigger(command, options, scope)
-		elif command == "show_trigger":
-			scope.iter = scope.iter+1
-			return await self.execute_show_trigger(command, options, scope)
-		elif command == "create_time_trigger":
-			scope.iter = scope.iter+1
-			return await self.execute_create_time_trigger(shell, command, options, scope)
-		elif command == "triggers":
-			scope.iter = scope.iter+1
-			return await self.execute_triggers(command, options, scope)
-		elif command == "delete_command":
-			scope.iter = scope.iter+1
-			return await self.execute_delete_command(command, options, scope)
-		elif self.command_regex.fullmatch(command):
-			return await self.execute_trigger_script(shell, command, options, scope)
+		await stream.finish()
 
-		return scope
+	@praxisbot.command
+	async def execute_time_triggers(self, scope, command, options, lines, **kwargs):
+		"""
+		List all time triggers.
+		"""
 
-	async def on_member_join(self, shell, scope):
-		await self.execute_trigger_script(shell, "@join", "", scope)
-		return True
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
 
-	async def on_member_leave(self, shell, scope):
-		await self.execute_trigger_script(shell, "@leave", "", scope)
-		return True
+		stream = praxisbot.MessageStream(scope)
+		await stream.send("**List of time triggers**\n")
 
-	async def on_ban(self, shell, scope):
-		await self.execute_trigger_script(shell, "@ban", "", scope)
-		return True
+		with scope.shell.dbcon:
+			c = scope.shell.dbcon.cursor()
+			for row in c.execute("SELECT script, start_time FROM "+scope.shell.dbtable("time_triggers")+" WHERE discord_sid = ? ORDER BY start_time", [int(scope.server.id)]):
+				await stream.send("\n"+row[1]+"\n```"+row[0]+"```")
 
-	async def on_unban(self, shell, scope):
-		await self.execute_trigger_script(shell, "@unban", "", scope)
-		return True
+		await stream.finish()

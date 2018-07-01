@@ -26,27 +26,42 @@ import io
 import traceback
 import time
 import asyncio
-
-from context import Context
-from scope import UserPermission
-from scope import ExecutionScope
+import inspect
+import datetime
+from pytz import timezone
+import sqlite3
+import praxisbot
 from plugins.core import CorePlugin
 from plugins.trigger import TriggerPlugin
+from plugins.moderation import ModerationPlugin
 from plugins.board import BoardPlugin
 from plugins.archive import ArchivePlugin
-from plugins.moderation import ModerationPlugin
-from plugins.http import HTTPPlugin
 from plugins.poll import PollPlugin
 from plugins.emoji import EmojiPlugin
+from plugins.http import HTTPPlugin
 
 ########################################################################
 # Init
 
-if len(sys.argv) < 2:
-	print("Usage: "+sys.argv[0]+" <DISCORD_TOKEN>")
+if len(sys.argv) < 4:
+	print("Usage: "+sys.argv[0]+" <BOT_TOKEN> <HUMAN_EMAIL> <HUMAN_PASSWORD>")
 	exit(0)
 
 botToken = sys.argv[1]
+humanEmail = sys.argv[2]
+humanPassword = sys.argv[3]
+
+########################################################################
+# Human
+
+class PraxisHuman(discord.Client):
+	"""
+	The main class of PraxisHuman
+	"""
+
+	async def on_ready(self):
+		print("Human logged on as {0}".format(self.user))
+
 
 ########################################################################
 # Bot
@@ -56,60 +71,34 @@ class PraxisBot(discord.Client):
 	The main class of PraxisBot
 	"""
 
-	def __init__(self, *args, **kwargs):
-		super().__init__(*args, **kwargs)
+	def __init__(self, client_human):
+		super().__init__()
 
-		self.ctx = None
-		self.plugins = []
+		self.mode = "testing"
+		self.dbprefix = "pb_"
+		self.dbcon = sqlite3.connect("databases/praxisbot-"+self.mode+".db", detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+		self.banned_members = {}
+
+		with self.dbcon:
+			#Server list
+			self.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.dbprefix+"servers(discord_sid INTEGER PRIMARY KEY, command_prefix TEXT)");
+
+		self.shell = praxisbot.Shell(self, client_human, self.dbprefix, self.dbcon)
+
 		self.loopstarted = False
 
-	def load_plugin(self, plugin):
-		"""
-		Create an instance of a plugin and register it
-		"""
-		try:
-			instance = plugin(self.ctx, self)
-			self.plugins.append(instance)
-			self.ctx.log("Plugin {0} loaded".format(plugin.name))
-		except:
-			print(traceback.format_exc())
-			self.ctx.log("Plugin {0} can't be loaded".format(plugin.name))
-
 	def load_all_plugins(self):
-		self.load_plugin(CorePlugin)
-		self.load_plugin(TriggerPlugin)
-		self.load_plugin(BoardPlugin)
-		self.load_plugin(ArchivePlugin)
-		self.load_plugin(ModerationPlugin)
-		self.load_plugin(HTTPPlugin)
-		self.load_plugin(PollPlugin)
-		self.load_plugin(EmojiPlugin)
-
-	async def execute_command(self, command, options, scope):
-		if scope.level > 8:
-			return scope
-
-		try:
-			for p in self.plugins:
-				i = scope.iter
-				scope = await p.execute_command(self, command, options, scope)
-				if scope.iter != i:
-					return scope
-
-			await self.ctx.send_message(scope.channel, "Command not found:\n`"+command+options+"`")
-
-		except Exception as exception:
-			print(traceback.format_exc())
-			await self.ctx.send_message(scope.channel, "PraxisBot Internal Error ("+type(exception).__name__+"):\n`"+command+options+"`")
-			scope.abort = True
-			pass
-
-		return scope
+		self.shell.load_plugin(CorePlugin)
+		self.shell.load_plugin(TriggerPlugin)
+		self.shell.load_plugin(ModerationPlugin)
+		self.shell.load_plugin(BoardPlugin)
+		self.shell.load_plugin(ArchivePlugin)
+		self.shell.load_plugin(PollPlugin)
+		self.shell.load_plugin(EmojiPlugin)
+		self.shell.load_plugin(HTTPPlugin)
 
 	async def on_ready(self):
-		self.ctx = Context(self, "testing")
-
-		self.ctx.log("Logged on as {0}".format(self.user))
+		print("Bot logged on as {0}".format(self.user))
 
 		self.load_all_plugins()
 
@@ -123,116 +112,93 @@ class PraxisBot(discord.Client):
 				if sleepDuration > 0:
 					await asyncio.sleep(sleepDuration)
 
-				for p in self.plugins:
-					await p.on_loop(self)
+				for p in self.shell.plugins:
+					for s in self.servers:
+						scope = self.shell.create_scope(s, [""])
+						scope.channel = self.shell.get_default_channel(s)
+						scope.user = s.me
+						scope.permission = praxisbot.UserPermission.Script
 
-
-	def add_global_variables_in_scope(self, scope):
-		newScope = scope
-
-		with self.ctx.dbcon:
-			c = self.ctx.dbcon.cursor()
-			for row in c.execute("SELECT name, value FROM "+self.ctx.dbprefix+"variables WHERE discord_sid = ?", [int(scope.server.id)]):
-				newScope.vars[row[0]] = row[1]
-
-		return newScope
+						await p.on_loop(scope)
 
 	async def on_message(self, message):
-		if not self.ctx:
-			return
-
 		if message.channel.is_private:
 			return
 		if message.author.__class__ != discord.Member:
 			return
-
-		prefix = self.ctx.get_command_prefix(message.server)
-
-		if message.content.find(self.user.mention+" ") == 0:
-			command = message.content[len(self.user.mention+" "):]
-		elif prefix and message.content.find(prefix) == 0:
-			command = message.content[len(prefix):]
-		else:
+		if message.author.bot:
 			return
 
-		lines = command.split("\n");
-		args = lines[0].split(" ")
+		prefixes = [self.user.mention+" "]
 
-		if args[0] == "help":
-			cmdlist = ["help"]
-			for p in self.plugins:
-				cmdlist = cmdlist + await p.list_commands(message.server)
-			cmdlist = sorted(cmdlist)
-			await self.ctx.send_message(message.channel, "Command list: "+", ".join(cmdlist)+".")
+		customCommandPrefix = self.shell.get_sql_data("servers", ["command_prefix"], {"discord_sid": int(message.server.id)})
+		if customCommandPrefix:
+			prefixes.append(customCommandPrefix[0])
 
-		elif args[0] == "dump":
-			text = []
-			for p in self.plugins:
-				text = text + await p.dump(message.server)
+		scope = self.shell.create_scope(message.server, prefixes)
+		scope.channel = message.channel
+		scope.user = message.author
+		if message.author.id == message.server.owner.id:
+			scope.permission = praxisbot.UserPermission.Owner
+		elif message.author.server_permissions.administrator:
+			scope.permission = praxisbot.UserPermission.Admin
 
-			f = io.BytesIO(("\n----------------------\n".join(text)).encode('UTF-8'))
-			await self.ctx.client.send_file(message.channel, f, filename="commands.txt", content=str(len(text))+" commands generated.")
-			f.close()
-
-		else:
-			scope = ExecutionScope()
-			scope.server = message.server
-			scope.channel = message.channel
-			scope.user = message.author
-			if message.author.id == message.server.owner.id:
-				scope.permission = UserPermission.Owner
-			elif message.author.server_permissions.administrator:
-				scope.permission = UserPermission.Admin
-
-			scope = self.add_global_variables_in_scope(scope)
-
-			scope = await self.execute_command(args[0], command[len(args[0]):], scope)
+		if await self.shell.execute_command(scope, message.content):
 			if scope.deletecmd:
-				await self.ctx.client.delete_message(message)
+				try:
+					await self.shell.client.delete_message(message)
+				except:
+					pass
+
 
 	async def on_member_join(self, member):
 		try:
-			scope = ExecutionScope()
-			scope.server = member.server
-			scope.channel = self.ctx.get_default_channel(member.server)
+			scope = self.shell.create_scope(member.server, [""])
+			scope.channel = self.shell.get_default_channel(member.server)
 			scope.user = member
-			scope.permission = UserPermission.Script
-			scope = self.add_global_variables_in_scope(scope)
+			scope.permission = praxisbot.UserPermission.Script
 
-			for p in self.plugins:
-				await p.on_member_join(self, scope)
+			for p in self.shell.plugins:
+				await p.on_member_join(scope)
 
 		except:
 			print(traceback.format_exc())
 			pass
 
 	async def on_member_remove(self, member):
-		try:
-			scope = ExecutionScope()
-			scope.server = member.server
-			scope.channel = self.ctx.get_default_channel(member.server)
-			scope.user = member
-			scope.permission = UserPermission.Script
-			scope = self.add_global_variables_in_scope(scope)
+		reason = "leave"
 
-			for p in self.plugins:
-				await p.on_member_leave(self, scope)
+		if member.id in self.banned_members:
+			accepted_time = datetime.datetime.now() - datetime.timedelta(minutes=1)
+			if self.banned_members[member.id] > accepted_time:
+				reason = "ban"
+
+		try:
+			scope = self.shell.create_scope(member.server, [""])
+			scope.channel = self.shell.get_default_channel(member.server)
+			scope.user = member
+			scope.permission = praxisbot.UserPermission.Script
+			scope.vars["reason"] = reason
+
+			for p in self.shell.plugins:
+				await p.on_member_leave(scope)
 
 		except:
 			print(traceback.format_exc())
 			pass
 
 	async def on_member_ban(self, member):
-		try:
-			scope = ExecutionScope()
-			scope.server = member.server
-			scope.channel = self.ctx.get_default_channel(member.server)
-			scope.user = member
-			scope.permission = UserPermission.Script
-			scope = self.add_global_variables_in_scope(scope)
 
-			for p in self.plugins:
-				await p.on_ban(self, scope)
+		self.banned_members[member.id] = datetime.datetime.now()
+
+		try:
+			scope = self.shell.create_scope(member.server, [""])
+			scope.channel = self.shell.get_default_channel(member.server)
+			scope.user = member
+			scope.permission = praxisbot.UserPermission.Script
+
+			for p in self.shell.plugins:
+				await p.on_ban(scope)
 
 		except:
 			print(traceback.format_exc())
@@ -240,23 +206,46 @@ class PraxisBot(discord.Client):
 
 	async def on_member_unban(self, server, user):
 		try:
-			scope = ExecutionScope()
-			scope.server = server
-			scope.channel = self.ctx.get_default_channel(server)
-			scope.user = user
-			scope.permission = UserPermission.Script
-			scope = self.add_global_variables_in_scope(scope)
+			fakeMember = {
+		        "user": {
+					"name": user.name,
+			        "id": user.id,
+			        "discriminator": user.discriminator,
+			        "avatar": user.avatar,
+			        "bot": user.bot
+				},
+		        "voice": None,
+		        "joined_at": 0,
+		        "roles": [],
+		        "status": discord.Status.offline,
+		        "game": None,
+		        "server": server,
+		        "nick": None
+			}
+			member = discord.Member(**fakeMember)
 
-			for p in self.plugins:
-				await p.on_unban(self, scope)
+			scope = self.shell.create_scope(server, [""])
+			scope.channel = self.shell.get_default_channel(server)
+			scope.user = member
+			scope.permission = praxisbot.UserPermission.Script
+
+			for p in self.shell.plugins:
+				await p.on_unban(scope)
 
 		except:
 			print(traceback.format_exc())
 			pass
 
-
 ########################################################################
 # Execute
 
-bot = PraxisBot()
-bot.run(botToken)
+try:
+	human = PraxisHuman()
+	human.loop.create_task(human.start(humanEmail, humanPassword))
+
+	bot = PraxisBot(human)
+	bot.run(botToken)
+
+except KeyboardInterrupt:
+	human.loop.run_until_complete(human.logout())
+	bot.loop.run_until_complete(bot.logout())

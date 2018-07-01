@@ -44,6 +44,7 @@ from .iterators import LogsFromIterator
 from .gateway import *
 from .emoji import Emoji
 from .http import HTTPClient
+from .profile import Profile
 
 import asyncio
 import aiohttp
@@ -3317,3 +3318,29 @@ class Client:
         """
         data = yield from self.http.get_user_info(user_id)
         return User(**data)
+
+    @asyncio.coroutine
+    def get_user_profile(self, user_id):
+        """|coro|
+
+        Retrieves an user :class:`Profile` based on their ID.
+
+        Parameters
+        -----------
+        user_id: str
+            The user's ID to fetch from.
+
+        Returns
+        --------
+        :class:`Profile`
+            The user profile you requested.
+
+        Raises
+        -------
+        NotFound
+            A user with this ID does not exist.
+        HTTPException
+            Fetching the user failed.
+        """
+        data = yield from self.http.get_user_profile(user_id)
+        return Profile(**data)
