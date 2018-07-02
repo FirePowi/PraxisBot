@@ -48,6 +48,7 @@ class ModerationPlugin(praxisbot.Plugin):
 		self.shell.create_sql_table("ban_time", ["id INTEGER PRIMARY KEY", "discord_sid INTEGER", "discord_uid INTEGER", "last_time DATETIME"])
 
 		self.add_command("ban", self.execute_ban)
+		self.add_command("last_bans", self.execute_last_bans)
 		self.add_command("kick", self.execute_kick)
 		self.add_command("list_channels", self.execute_list_channels)
 		self.add_command("create_mod_level", self.execute_create_mod_level)
@@ -335,6 +336,7 @@ class ModerationPlugin(praxisbot.Plugin):
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('member', help='Name of the member to '+action_name+'.')
+		parser.add_argument('--reason', help='Reason for the '+action_name+'.')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -368,7 +370,13 @@ class ModerationPlugin(praxisbot.Plugin):
 
 		try:
 			if action_name == "ban":
-				await scope.shell.client.ban(u, delete_message_days=0)
+				reason = scope.user.name+"#"+scope.user.discriminator+" using ban command"
+				if args.reason:
+					reason = reason+": "+args.reason
+				elif len(lines) > 0:
+					reason = reason+": "+"\n".join(lines)
+
+				await scope.shell.client.ban(u, delete_message_days=0, reason=reason)
 			else:
 				await scope.shell.client.kick(u)
 		except:
@@ -396,6 +404,42 @@ class ModerationPlugin(praxisbot.Plugin):
 		"""
 
 		await self.execute_kick_or_ban(scope, command, options, lines, action_name="kick", **kwargs)
+
+	@praxisbot.command
+	async def execute_last_bans(self, scope, command, options, lines, **kwargs):
+		"""
+		List last bans.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return scope
+
+		stream = praxisbot.MessageStream(scope)
+		await stream.send("**__Last bans__**")
+
+		bans = await scope.shell.client.get_ban_logs(scope.server, limit=5)
+		for b in bans:
+			author = b.author
+			target = b.target
+			reason = b.reason
+
+			if b.author.id == scope.shell.client.user.id:
+				#Try to find the true author in the reason
+				res = re.search("(.+#[0-9][0-9][0-9][0-9]) using ban command", b.reason)
+				if res:
+					u = scope.shell.find_member(res.group(1), scope.server)
+					if u:
+						author = u
+
+				res = re.search("using ban command:(.+)", b.reason)
+				if res:
+					reason = res.group(1).strip()
+
+			await stream.send("\n\n**"+target.mention+" by "+author.mention+"**\n"+reason)
+
+		await stream.finish()
 
 	@praxisbot.command
 	async def execute_set_mod_options(self, scope, command, options, lines, **kwargs):

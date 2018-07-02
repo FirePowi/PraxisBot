@@ -45,6 +45,7 @@ from .gateway import *
 from .emoji import Emoji
 from .http import HTTPClient
 from .profile import Profile
+from .audit_log import AuditLog
 
 import asyncio
 import aiohttp
@@ -1707,7 +1708,7 @@ class Client:
         yield from self.http.kick(member.id, member.server.id)
 
     @asyncio.coroutine
-    def ban(self, member, delete_message_days=1):
+    def ban(self, member, *, delete_message_days=1, reason=None):
         """|coro|
 
         Bans a :class:`Member` from the server they belong to.
@@ -1725,6 +1726,8 @@ class Client:
         delete_message_days : int
             The number of days worth of messages to delete from the user
             in the server. The minimum is 0 and the maximum is 7.
+        reason : str
+            Reason of the ban.
 
         Raises
         -------
@@ -1733,7 +1736,7 @@ class Client:
         HTTPException
             Banning failed.
         """
-        yield from self.http.ban(member.id, member.server.id, delete_message_days)
+        yield from self.http.ban(member.id, member.server.id, delete_message_days, reason)
 
     @asyncio.coroutine
     def unban(self, server, user):
@@ -2410,6 +2413,37 @@ class Client:
 
         data = yield from self.http.get_bans(server.id)
         return [User(**user['user']) for user in data]
+
+    @asyncio.coroutine
+    def get_ban_logs(self, server, *, limit):
+        """|coro|
+
+        Retrieves last bans from audit logs.
+
+        You must have proper permissions to get this information.
+
+        Parameters
+        ----------
+        server : :class:`Server`
+            The server to get ban information from.
+        limit: int
+            The number of logs to retrieve.
+
+        Raises
+        -------
+        Forbidden
+            You do not have proper permissions to get the information.
+        HTTPException
+            An error occurred while fetching the information.
+
+        Returns
+        --------
+        list
+            A list of :class:`AuditLog`.
+        """
+
+        data = yield from self.http.get_ban_logs(server.id, limit=limit)
+        return [AuditLog(**entry, users=data["users"]) for entry in data["audit_log_entries"]]
 
     @asyncio.coroutine
     def prune_members(self, server, *, days):

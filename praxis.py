@@ -23,6 +23,7 @@ along with PraxisBot.  If not, see <http://www.gnu.org/licenses/>.
 import discord
 import sys
 import io
+import re
 import traceback
 import time
 import asyncio
@@ -191,11 +192,37 @@ class PraxisBot(discord.Client):
 
 		self.banned_members[member.id] = datetime.datetime.now()
 
+		ban_author = ""
+		ban_reason = ""
+		bans = await self.shell.client.get_ban_logs(member.server, limit=5)
+		for b in bans:
+			if b.target.id == member.id:
+				author = b.author
+				reason = b.reason
+
+				if b.author.id == self.shell.client.user.id:
+					#Try to find the true author in the reason
+					res = re.search("(.+#[0-9][0-9][0-9][0-9]) using ban command", b.reason)
+					if res:
+						u = self.shell.find_member(res.group(1), member.server)
+						if u:
+							author = u
+
+					res = re.search("using ban command:(.+)", b.reason)
+					if res:
+						reason = res.group(1).strip()
+
+				ban_author = author.name+"#"+author.discriminator
+				ban_reason = reason
+				break
+
 		try:
 			scope = self.shell.create_scope(member.server, [""])
 			scope.channel = self.shell.get_default_channel(member.server)
 			scope.user = member
 			scope.permission = praxisbot.UserPermission.Script
+			scope.vars["reason"] = ban_reason
+			scope.vars["author"] = ban_author
 
 			for p in self.shell.plugins:
 				await p.on_ban(scope)

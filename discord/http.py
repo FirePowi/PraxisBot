@@ -397,11 +397,13 @@ class HTTPClient:
         r = Route('DELETE', '/guilds/{guild_id}/members/{user_id}', guild_id=guild_id, user_id=user_id)
         return self.request(r)
 
-    def ban(self, user_id, guild_id, delete_message_days=1):
+    def ban(self, user_id, guild_id, delete_message_days=1, reason=None):
         r = Route('PUT', '/guilds/{guild_id}/bans/{user_id}', guild_id=guild_id, user_id=user_id)
         params = {
             'delete-message-days': delete_message_days
         }
+        if reason:
+            params["reason"] = reason
         return self.request(r, params=params)
 
     def unban(self, user_id, guild_id):
@@ -508,6 +510,9 @@ class HTTPClient:
 
     def get_bans(self, guild_id):
         return self.request(Route('GET', '/guilds/{guild_id}/bans', guild_id=guild_id))
+
+    def get_ban_logs(self, guild_id, limit):
+        return self.request(Route('GET', '/guilds/{guild_id}/audit-logs?limit={limit}&action_type=22', guild_id=guild_id, limit=limit))
 
     def prune_members(self, guild_id, days):
         params = {
