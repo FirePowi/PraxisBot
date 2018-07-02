@@ -222,7 +222,7 @@ class ExecutionScope:
 			if user_chk:
 				subUser = user_chk.group(2).strip()
 				if subUser in self.vars:
-					subUser = self.vars[subUser]
+					subUser = self.vars[subUser].strip()
 				u = self.shell.find_member(subUser, self.server)
 				tag = user_chk.group(1)
 
