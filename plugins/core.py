@@ -135,14 +135,14 @@ class CorePlugin(praxisbot.Plugin):
 			b = scope.format_text(args.find).lower()
 			res = (a.find(b) >= 0)
 		elif args.ismember:
-			u = shell.find_member(scope.format_text(args.firstvar), scope.server)
+			u = scope.shell.find_member(scope.format_text(args.firstvar), scope.server)
 			res = (u != None)
 		elif args.hasroles:
-			u = shell.find_member(scope.format_text(args.firstvar), scope.server)
+			u = scope.shell.find_member(scope.format_text(args.firstvar), scope.server)
 			r = []
 			for i in args.hasroles:
 				formatedRole = scope.format_text(i)
-				role = shell.find_role(formatedRole, scope.server)
+				role = scope.shell.find_role(formatedRole, scope.server)
 				if role:
 					r.append(role)
 			if u:
@@ -460,15 +460,18 @@ class CorePlugin(praxisbot.Plugin):
 				roles.append(r.name)
 		e.add_field(name="Roles", value=", ".join(roles))
 
-		profile = await scope.shell.client_human.get_user_profile(u.id)
+		try:
+			profile = await scope.shell.client_human.get_user_profile(u.id)
 
-		stream = praxisbot.MessageStream(scope)
-		for ca in profile.connected_accounts:
-			url = ca.url
-			if url:
-				e.add_field(name=ca.provider_name, value=url)
-			else:
-				e.add_field(name=ca.provider_name, value=ca.name)
+			stream = praxisbot.MessageStream(scope)
+			for ca in profile.connected_accounts:
+				url = ca.url
+				if url:
+					e.add_field(name=ca.provider_name, value=url)
+				else:
+					e.add_field(name=ca.provider_name, value=ca.name)
+		except:
+			pass
 
 		await scope.shell.client.send_message(scope.channel, "", embed=e)
 
