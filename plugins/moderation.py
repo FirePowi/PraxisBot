@@ -438,7 +438,7 @@ class ModerationPlugin(praxisbot.Plugin):
 				if res:
 					reason = res.group(1).strip()
 
-			await stream.send("\n\n**"+target.mention+" by "+author.mention+"**\n"+reason)
+			await stream.send("\n\n**"+target.name+"#"+target.discriminator+" by "+author.name+"#"+author.discriminator+"**\n"+reason)
 
 		await stream.finish()
 
