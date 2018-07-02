@@ -298,7 +298,7 @@ class CorePlugin(praxisbot.Plugin):
 			return
 
 		if args.channel:
-			chan = scope.shell.find_channel(args.channel, scope.server)
+			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.server)
 		else:
 			chan = scope.channel
 
