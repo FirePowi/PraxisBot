@@ -406,6 +406,7 @@ class ModerationPlugin(praxisbot.Plugin):
 		await self.execute_kick_or_ban(scope, command, options, lines, action_name="kick", **kwargs)
 
 	@praxisbot.command
+	@praxisbot.permission_admin
 	async def execute_last_bans(self, scope, command, options, lines, **kwargs):
 		"""
 		List last bans.
