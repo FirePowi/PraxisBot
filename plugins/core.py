@@ -471,7 +471,8 @@ class CorePlugin(praxisbot.Plugin):
 		for r in u.roles:
 			if not r.is_everyone:
 				roles.append(r.name)
-		e.add_field(name="Roles", value=", ".join(roles))
+		if len(roles):
+			e.add_field(name="Roles", value=", ".join(roles))
 
 		try:
 			profile = await scope.shell.client_human.get_user_profile(u.id)
