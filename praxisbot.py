@@ -231,7 +231,7 @@ class ExecutionScope:
 			if channel_chk:
 				subChan = channel_chk.group(2).strip()
 				if subChan in self.vars:
-					subChan = self.vars[subUser]
+					subChan = self.vars[subChan]
 				c = self.shell.find_channel(subChan, self.server)
 				tag = channel_chk.group(1)
 
