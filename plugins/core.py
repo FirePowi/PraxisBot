@@ -367,16 +367,15 @@ class CorePlugin(praxisbot.Plugin):
 				rolesToRemove.append(role)
 
 		res = await scope.shell.change_roles(u, rolesToAdd, rolesToRemove)
-		if not args.silent:
-			if res:
-				output = "The following roles has been changed from "+u.display_name+":"
-				for i in res[0]:
-					output = output + "\n + " + i.name
-				for i in res[1]:
-					output = output + "\n - " + i.name
-				await scope.shell.print_success(scope, output)
-			else:
-				await scope.shell.print_error(scope, "Roles can't be changed")
+		if res:
+			output = "The following roles has been changed from "+u.display_name+":"
+			for i in res[0]:
+				output = output + "\n + " + i.name
+			for i in res[1]:
+				output = output + "\n - " + i.name
+			await scope.shell.print_success(scope, output)
+		else:
+			await scope.shell.print_error(scope, "Roles can't be changed")
 
 	@praxisbot.command
 	@praxisbot.permission_admin
