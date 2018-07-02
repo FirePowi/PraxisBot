@@ -236,9 +236,9 @@ class ExecutionScope:
 				tag = channel_chk.group(1)
 
 			if tag.lower() == "server" and self.server:
-				tagOutput = server.name
+				tagOutput = self.server.name
 			elif tag.lower() == "*server" and self.server:
-				tagOutput = server.id
+				tagOutput = self.server.id
 			elif tag.lower() == "n":
 				tagOutput = "\n"
 			elif tag.lower() == "now":
