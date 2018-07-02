@@ -435,8 +435,22 @@ class CorePlugin(praxisbot.Plugin):
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('user', help='An user')
+		parser.add_argument('--channel', '-c', help='Channel where to send the message')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
+			return
+
+		if args.channel:
+			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.server)
+		else:
+			chan = scope.channel
+
+		if not chan:
+			await scope.shell.print_error(scope, "Unknown channel.")
+			return
+
+		if not chan.permissions_for(scope.user).send_messages:
+			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
 			return
 
 		u = scope.shell.find_member(scope.format_text(args.user), scope.server)
@@ -472,7 +486,7 @@ class CorePlugin(praxisbot.Plugin):
 		except:
 			pass
 
-		await scope.shell.client.send_message(scope.channel, "", embed=e)
+		await scope.shell.client.send_message(chan, "", embed=e)
 
 	@praxisbot.command
 	async def execute_delete_message(self, scope, command, options, lines, **kwargs):
