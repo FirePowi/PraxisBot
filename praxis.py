@@ -156,8 +156,9 @@ class PraxisBot(discord.Client):
 		try:
 			scope = self.shell.create_scope(member.server, [""])
 			scope.channel = self.shell.get_default_channel(member.server)
-			scope.user = member
+			scope.user = member.server.me
 			scope.permission = praxisbot.UserPermission.Script
+			scope.vars["target"] = member.name+"#"+member.discriminator
 
 			for p in self.shell.plugins:
 				await p.on_member_join(scope)
@@ -177,8 +178,9 @@ class PraxisBot(discord.Client):
 		try:
 			scope = self.shell.create_scope(member.server, [""])
 			scope.channel = self.shell.get_default_channel(member.server)
-			scope.user = member
+			scope.user = member.server.me
 			scope.permission = praxisbot.UserPermission.Script
+			scope.vars["target"] = member.name+"#"+member.discriminator
 			scope.vars["reason"] = reason
 
 			for p in self.shell.plugins:
@@ -193,6 +195,7 @@ class PraxisBot(discord.Client):
 		self.banned_members[member.id] = datetime.datetime.now()
 
 		ban_author = ""
+		ban_target = ""
 		ban_reason = ""
 		bans = await self.shell.client.get_ban_logs(member.server, limit=5)
 		for b in bans:
@@ -214,15 +217,17 @@ class PraxisBot(discord.Client):
 
 				ban_author = author.name+"#"+author.discriminator
 				ban_reason = reason
+				ban_target = b.target.name+"#"+b.target.discriminator
 				break
 
 		try:
 			scope = self.shell.create_scope(member.server, [""])
 			scope.channel = self.shell.get_default_channel(member.server)
-			scope.user = member
+			scope.user = member.server.me
 			scope.permission = praxisbot.UserPermission.Script
 			scope.vars["reason"] = ban_reason
 			scope.vars["author"] = ban_author
+			scope.vars["target"] = member.name+"#"+member.discriminator
 
 			for p in self.shell.plugins:
 				await p.on_ban(scope)
@@ -233,28 +238,11 @@ class PraxisBot(discord.Client):
 
 	async def on_member_unban(self, server, user):
 		try:
-			fakeMember = {
-		        "user": {
-					"name": user.name,
-			        "id": user.id,
-			        "discriminator": user.discriminator,
-			        "avatar": user.avatar,
-			        "bot": user.bot
-				},
-		        "voice": None,
-		        "joined_at": 0,
-		        "roles": [],
-		        "status": discord.Status.offline,
-		        "game": None,
-		        "server": server,
-		        "nick": None
-			}
-			member = discord.Member(**fakeMember)
-
 			scope = self.shell.create_scope(server, [""])
 			scope.channel = self.shell.get_default_channel(server)
-			scope.user = member
+			scope.user = server.me
 			scope.permission = praxisbot.UserPermission.Script
+			scope.vars["target"] = user.name+"#"+user.discriminator
 
 			for p in self.shell.plugins:
 				await p.on_unban(scope)
