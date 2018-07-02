@@ -475,6 +475,12 @@ class CorePlugin(praxisbot.Plugin):
 			e.add_field(name="Roles", value=", ".join(roles))
 
 		try:
+			counter = await scope.shell.client_human.count_messages(scope.server, author=u)
+			e.add_field(name="Activity", value=str(counter)+" messages")
+		except:
+			pass
+
+		try:
 			profile = await scope.shell.client_human.get_user_profile(u.id)
 
 			stream = praxisbot.MessageStream(scope)

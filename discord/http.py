@@ -366,6 +366,15 @@ class HTTPClient:
         r = Route('GET', '/channels/{channel_id}/messages/{message_id}', channel_id=channel_id, message_id=message_id)
         return self.request(r)
 
+    def count_messages(self, server_id, *, content=None, author_id=None):
+        params = {}
+        if content:
+            params["content"] = content
+        if author_id:
+            params["author_id"] = author_id
+
+        return self.request(Route('GET', '/guilds/{server_id}/messages/search', server_id=server_id), params=params)
+
     def logs_from(self, channel_id, limit, before=None, after=None, around=None):
         params = {
             'limit': limit

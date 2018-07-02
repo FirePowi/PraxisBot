@@ -1444,6 +1444,42 @@ class Client:
         return self.connection._create_message(channel=channel, **data)
 
     @asyncio.coroutine
+    def count_messages(self, server, *, content=None, author=None):
+        """|coro|
+
+        Count the number of messages that match the filter.
+
+        Parameters
+        ------------
+        server: :class:`Server`
+            The server to retrieve the message from.
+        content: str
+            Count messages with this content.
+        author: :class:`User`
+            Count messages posted by this user.
+
+        Returns
+        --------
+        int
+            Number of messages found.
+
+        Raises
+        --------
+        Forbidden
+            You do not have the permissions required to get a message.
+        HTTPException
+            Retrieving the message failed.
+        """
+
+        args = {}
+        if content:
+            args["content"] = content
+        if author:
+            args["author_id"] = author.id
+        data = yield from self.http.count_messages(server.id, **args)
+        return int(data["total_results"])
+
+    @asyncio.coroutine
     def get_message(self, channel, id):
         """|coro|
 
