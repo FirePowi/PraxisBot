@@ -44,13 +44,12 @@ from plugins.http import HTTPPlugin
 ########################################################################
 # Init
 
-if len(sys.argv) < 4:
-	print("Usage: "+sys.argv[0]+" <BOT_TOKEN> <HUMAN_EMAIL> <HUMAN_PASSWORD>")
+if len(sys.argv) < 3:
+	print("Usage: "+sys.argv[0]+" <BOT_TOKEN> <HUMAN_TOKEN>")
 	exit(0)
 
 botToken = sys.argv[1]
-humanEmail = sys.argv[2]
-humanPassword = sys.argv[3]
+humanToken = sys.argv[2]
 
 ########################################################################
 # Human
@@ -256,7 +255,7 @@ class PraxisBot(discord.Client):
 
 try:
 	human = PraxisHuman()
-	human.loop.create_task(human.start(humanEmail, humanPassword))
+	human.loop.create_task(human.start(humanToken, bot=False))
 
 	bot = PraxisBot(human)
 	bot.run(botToken)
