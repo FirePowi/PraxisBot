@@ -43,6 +43,8 @@ class BoardPlugin(praxisbot.Plugin):
 		self.add_command("create_board", self.execute_create_board)
 		self.add_command("edit_board", self.execute_edit_board)
 		self.add_command("delete_board", self.execute_delete_board)
+		self.add_command("show_board", self.execute_show_board)
+		self.add_command("boards", self.execute_boards)
 
 	def create_embed(self, boardname, author):
 		e = discord.Embed();
@@ -77,7 +79,7 @@ class BoardPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Unknown channel.")
 			return
 
-		if not chan.permissions_for(scope.user).send_messages:
+		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).send_messages:
 			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
 			return
 
@@ -121,7 +123,7 @@ class BoardPlugin(praxisbot.Plugin):
 			return
 
 		chan = scope.shell.find_channel(str(board[1]), scope.server)
-		if chan and not chan.permissions_for(scope.user).send_messages:
+		if chan and scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).send_messages:
 			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
 			return
 
@@ -155,7 +157,7 @@ class BoardPlugin(praxisbot.Plugin):
 		if not chan:
 			await scope.shell.print_error(scope, "The channel associated with this board is not accessible.")
 			return
-		if not chan.permissions_for(scope.user).send_messages:
+		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).send_messages:
 			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
 			return
 
@@ -182,3 +184,69 @@ class BoardPlugin(praxisbot.Plugin):
 		await scope.shell.client.edit_message(m, content, embed=e)
 
 		await scope.shell.print_success(scope, "Board `"+boardname+"` edited.")
+
+	@praxisbot.command
+	async def execute_show_board(self, scope, command, options, lines, **kwargs):
+		"""
+		Show the source code of a board.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('boardname', help='Name of the board')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		boardname = scope.format_text(args.boardname)
+		self.ensure_object_name("Board name", boardname)
+
+		board = scope.shell.get_sql_data("boards", ["id", "discord_cid", "discord_mid"], {"discord_sid": int(scope.server.id), "name": str(boardname)})
+		if not board:
+			await scope.shell.print_error(scope, "Board `"+boardname+"` not found.")
+			return
+
+		chan = scope.shell.find_channel(str(board[1]), scope.server)
+		if not chan:
+			await scope.shell.print_error(scope, "The channel associated with this board is not accessible.")
+			return
+		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).read_messages:
+			await scope.shell.print_permission(scope, "You don't have read permission in this channel.")
+			return
+
+		m = None
+		try:
+			m = await scope.shell.client.get_message(chan, str(board[2]))
+		except:
+			pass
+		if not m:
+			await scope.shell.print_error(scope, "The message associated with this board is not accessible.")
+			return scope
+
+		await scope.hell.client.send_message(scope.channel, "```"+m.content+"```")
+
+	@praxisbot.command
+	async def execute_boards(self, scope, command, options, lines, **kwargs):
+		"""
+		List all boards.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		stream = praxisbot.MessageStream(scope)
+		await stream.send("**List of boards**\n")
+
+		with scope.shell.dbcon:
+			c = scope.shell.dbcon.cursor()
+			for row in c.execute("SELECT name, discord_cid FROM "+scope.shell.dbtable("boards")+" WHERE discord_sid = ? ORDER BY name", [int(scope.server.id)]):
+
+				chan = scope.shell.find_channel(str(row[1]), scope.server)
+				if not chan:
+					continue
+				if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).read_messages:
+					continue
+				await stream.send("\n - `"+row[0]+"` in "+chan.mention)
+
+		await stream.finish()

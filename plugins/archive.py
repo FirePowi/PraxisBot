@@ -88,7 +88,7 @@ class ArchivePlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Unknown channel.")
 			return
 
-		if not chan.permissions_for(scope.user).read_messages:
+		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).read_messages:
 			await scope.shell.print_permission(scope, "You don't have read permission in this channel.")
 			return
 
@@ -133,7 +133,7 @@ class ArchivePlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Unknown channel.")
 			return
 
-		if not chan.permissions_for(scope.user).read_messages:
+		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).read_messages:
 			await scope.shell.print_permission(scope, "You don't have read permission in this channel.")
 			return
 
@@ -181,7 +181,7 @@ class ArchivePlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Unknown channel.")
 			return
 
-		if not chan.permissions_for(scope.user).read_messages:
+		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).read_messages:
 			await scope.shell.print_permission(scope, "You don't have read permission in this channel.")
 			return
 

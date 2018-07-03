@@ -306,7 +306,7 @@ class CorePlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Unknown channel.")
 			return
 
-		if not chan.permissions_for(scope.user).send_messages:
+		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).send_messages:
 			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
 			return
 
@@ -449,7 +449,7 @@ class CorePlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Unknown channel.")
 			return
 
-		if not chan.permissions_for(scope.user).send_messages:
+		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).send_messages:
 			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
 			return
 
