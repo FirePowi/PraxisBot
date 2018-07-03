@@ -522,6 +522,13 @@ class Shell:
 		sqlQuery = "CREATE TABLE IF NOT EXISTS "+self.dbtable(tablename)+" ("+", ".join(fields)+")"
 		self.dbcon.execute(sqlQuery);
 
+		for f in fields:
+			try:
+				sqlQuery = "ALTER TABLE "+self.dbtable(tablename)+" ADD "+f
+				self.dbcon.execute(sqlQuery);
+			except sqlite3.OperationalError:
+				pass
+
 	def get_sql_data(self, tablename, fields, where):
 		sqlQuery = "SELECT "+", ".join(fields)+" FROM "+self.dbtable(tablename)+" "
 		vars = []

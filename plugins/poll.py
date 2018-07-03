@@ -29,6 +29,11 @@ import sqlite3
 from pytz import timezone
 import praxisbot
 
+class PollType:
+	Default=0
+	Short=1
+	Live=2
+
 class PollPlugin(praxisbot.Plugin):
 	"""
 	Poll commands
@@ -39,7 +44,7 @@ class PollPlugin(praxisbot.Plugin):
 	def __init__(self, shell):
 		super().__init__(shell)
 
-		self.shell.create_sql_table("polls", ["id INTEGER PRIMARY KEY", "discord_sid INTEGER", "discord_cid INTEGER", "discord_mid INTEGER", "end_time DATETIME", "description TEXT"])
+		self.shell.create_sql_table("polls", ["id INTEGER PRIMARY KEY", "discord_sid INTEGER", "discord_cid INTEGER", "discord_mid INTEGER", "end_time DATETIME", "description TEXT", "type INTEGER"])
 		self.shell.create_sql_table("poll_choices", ["id INTEGER PRIMARY KEY", "poll INTEGER", "emoji TEXT", "description TEXT"])
 		self.shell.create_sql_table("votes", ["id INTEGER PRIMARY KEY", "poll INTEGER", "discord_uid INTEGER", "choice INTEGER", "vote_time DATETIME"])
 
@@ -54,7 +59,7 @@ class PollPlugin(praxisbot.Plugin):
 		with scope.shell.dbcon:
 			c0 = scope.shell.dbcon.cursor()
 			c1 = scope.shell.dbcon.cursor()
-			for poll in c0.execute("SELECT id, discord_cid, discord_mid, description, end_time as 'end_time_ [timestamp]' FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ?", [int(scope.server.id)]):
+			for poll in c0.execute("SELECT id, discord_cid, discord_mid, description, end_time as 'end_time_ [timestamp]', type FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ?", [int(scope.server.id)]):
 				chan = scope.shell.find_channel(str(poll[1]), scope.server)
 				if not chan:
 					continue
@@ -68,6 +73,7 @@ class PollPlugin(praxisbot.Plugin):
 					continue
 
 				end_time = timezone('UTC').localize(poll[4])
+				end_time_readable = end_time.astimezone(timezone('Europe/Paris'))
 				current_time = datetime.datetime.now(timezone('UTC'))
 				if end_time < current_time:
 
@@ -88,10 +94,8 @@ class PollPlugin(praxisbot.Plugin):
 					choices = {}
 					reaction_already_added = []
 
-					text = poll[3]+"\n\n**To vote, please click on one of the following reactions:**"
 					for choice in c1.execute("SELECT id, emoji, description FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [poll[0]]):
 						choices[choice[0]] = choice[1]
-						text = text+"\n\n"+choice[1]+" : "+str(choice[2])
 
 					for r in msg.reactions:
 						current_choice = None
@@ -118,6 +122,7 @@ class PollPlugin(praxisbot.Plugin):
 									elif choices[current_choice] != choices[vote[1]]:
 										scope.shell.update_sql_data("votes", {"choice":current_choice}, {"id": vote[0]})
 										await scope.shell.client.send_message(ru, "Your vote on the server \""+scope.server.name+"\" is confirmed.\n - Vote removed: "+choices[vote[1]]+"\n - Vote added: "+choices[current_choice])
+										changes = True
 									else:
 										await scope.shell.client.send_message(ru, "Your vote on the server \""+scope.server.name+"\" is confirmed.")
 								except:
@@ -129,8 +134,21 @@ class PollPlugin(praxisbot.Plugin):
 							await scope.shell.client.add_reaction(msg, choices[c])
 
 					if changes:
-						counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0]})
-						text = text+"\n\nVoters: "+str(counter[0])
+
+						text = poll[3]
+						if poll[5] != PollType.Short:
+							text = text+"\n\n**Poll closing at "+end_time_readable.strftime("%Y-%m-%d %H:%M:%S")+".\nTo vote, please click on one of the following reactions:**"
+
+						for choice in c1.execute("SELECT id, emoji, description FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [poll[0]]):
+							if poll[5] != PollType.Short:
+								text = text+"\n\n"+choice[1]+" : "+str(choice[2])
+							if poll[5] == PollType.Live:
+								counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0], "choice": choice[0]})
+								text = text+" ("+str(counter[0])+")"
+
+						if poll[5] != PollType.Short:
+							counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0]})
+							text = text+"\n\nVoters: "+str(counter[0])
 
 						await scope.shell.client.edit_message(msg, text)
 
@@ -142,10 +160,19 @@ class PollPlugin(praxisbot.Plugin):
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('--duration', help='Duration of the poll in hours.')
+		parser.add_argument('--description', help='Description of the poll.')
+		parser.add_argument('--short', action='store_true', help='Remove all explanations except the description.')
+		parser.add_argument('--live', action='store_true', help='Display results in real time.')
 		parser.add_argument('--choices', nargs='*', help='List of emoji and decriptions. Ex: `👎 "No" 🤷 "Neutral" 👍 "Yes".`', default=["👎", "I disagree", "🤷", "Neutral", "👍", "I agree"])
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
+
+		poll_type = PollType.Default
+		if args.live:
+			poll_type = PollType.Live
+		elif args.short:
+			poll_type = PollType.Short
 
 		duration = 24
 		if args.duration:
@@ -168,12 +195,20 @@ class PollPlugin(praxisbot.Plugin):
 				choices.append({"emoji":choice_emoji, "description":c})
 				choice_emoji = None
 
-		description = "\n".join(lines)
+		if args.description:
+			description = scope.format_text(args.description)
+		else:
+			description = scope.format_text("\n".join(lines))
+
+		end_time = datetime.datetime.now(timezone('UTC')) + datetime.timedelta(hours=duration)
+		end_time_readable = end_time.astimezone(timezone('Europe/Paris'))
+
 		text = description
-		text = text+"\n\n**To vote, please click on one of the following reactions:**"
-		for c in choices:
-			text = text+"\n\n"+c["emoji"]+" : "+c["description"]
-		text = text+"\n\nVoters: "+str(0)
+		if poll_type != PollType.Short:
+			text = text+"\n\n**Poll closing at "+end_time_readable.strftime("%Y-%m-%d %H:%M:%S")+".\nTo vote, please click on one of the following reactions:**"
+			for c in choices:
+				text = text+"\n\n"+c["emoji"]+" : "+c["description"]
+			text = text+"\n\nVoters: "+str(0)
 
 		msg = await scope.shell.client.send_message(scope.channel, text)
 
@@ -184,9 +219,7 @@ class PollPlugin(praxisbot.Plugin):
 				await scope.shell.print_error(scope, "\""+c["emoji"]+"\" is not a valid emoji.")
 				return
 
-		end_time = datetime.datetime.now(timezone('UTC')) + datetime.timedelta(hours=duration)
-
-		poll_id = scope.shell.add_sql_data("polls", {"discord_sid": int(msg.server.id), "discord_cid": int(msg.channel.id), "discord_mid": int(msg.id), "description": description, "end_time": str(end_time)})
+		poll_id = scope.shell.add_sql_data("polls", {"discord_sid": int(msg.server.id), "discord_cid": int(msg.channel.id), "discord_mid": int(msg.id), "description": description, "end_time": str(end_time), "type":int(poll_type)})
 
 		for c in choices:
 			scope.shell.add_sql_data("poll_choices", {"poll": poll_id, "emoji": c["emoji"], "description": c["description"]})
@@ -203,18 +236,29 @@ class PollPlugin(praxisbot.Plugin):
 			return
 
 		stream = praxisbot.MessageStream(scope)
-		await stream.send("**List of polls**\n")
+		await stream.send("__**List of polls**__")
 
 		with scope.shell.dbcon:
-			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT id, description, discord_cid, end_time as 'end_time_ [timestamp]' FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ? ORDER BY end_time", [int(scope.server.id)]):
+			c0 = scope.shell.dbcon.cursor()
+			c1 = scope.shell.dbcon.cursor()
+			for row in c0.execute("SELECT id, description, discord_cid, end_time as 'end_time_ [timestamp]' FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ? ORDER BY end_time", [int(scope.server.id)]):
 				chan = scope.shell.find_channel(str(row[2]), scope.server)
 				if not chan:
 					continue
 
 				end_time = timezone('UTC').localize(row[3])
-				time = (end_time - datetime.datetime.now(timezone('UTC')))
+				end_time = end_time.astimezone(timezone('Europe/Paris'))
 
-				await stream.send("\n**Poll #"+str(row[0])+" in "+chan.mention+"**\nClosed in "+str(time)+"```"+row[1]+"```")
+				counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": row[0]})
+
+				await stream.send("\n\n:bar_chart: **Poll #"+str(row[0])+" in "+chan.mention+"**")
+				await stream.send("\n - Closing time: "+end_time.strftime("%Y-%m-%d %H:%M:%S"))
+				choices = []
+				for choice in c1.execute("SELECT emoji, description FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [row[0]]):
+					choices.append(choice[0]+" "+choice[1])
+				await stream.send("\n - Voters: "+str(counter[0]))
+				await stream.send("\n - Choices: "+", ".join(choices))
+				if len(row[1]) > 0:
+					description = "```\n"+row[1]+"\n```"
 
 		await stream.finish()

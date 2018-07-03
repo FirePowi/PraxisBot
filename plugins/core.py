@@ -186,7 +186,7 @@ class CorePlugin(praxisbot.Plugin):
 		if args.list:
 			list = args.list
 		elif args.inset:
-			val = scope.vars[args.inset]
+			val = scope.vars.get(args.inset, "")
 			list = val.split("\n")
 		else:
 			list = []
@@ -255,7 +255,7 @@ class CorePlugin(praxisbot.Plugin):
 		if args.glob:
 			scope.shell.set_sql_data("variables", {"discord_sid": int(scope.server.id), "name": str(var)}, {"value":str(val)})
 
-		await scope.shell.print_success(scope, "`"+str(var)+"` is now equal to:\n```"+str(val)+"```")
+		await scope.shell.print_success(scope, "`"+str(var)+"` is now equal to:\n```\n"+str(val)+"```")
 
 
 	@praxisbot.command

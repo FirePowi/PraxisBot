@@ -197,6 +197,7 @@ class PraxisBot(discord.Client):
 		ban_author = ""
 		ban_target = ""
 		ban_reason = ""
+		
 		bans = await self.shell.client.get_ban_logs(member.server, limit=5)
 		for b in bans:
 			if b.target.id == member.id:
