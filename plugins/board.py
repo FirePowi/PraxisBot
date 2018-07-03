@@ -222,7 +222,7 @@ class BoardPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "The message associated with this board is not accessible.")
 			return scope
 
-		await scope.hell.client.send_message(scope.channel, "```"+m.content+"```")
+		await scope.shell.client.send_message(scope.channel, "```"+m.content+"```")
 
 	@praxisbot.command
 	async def execute_boards(self, scope, command, options, lines, **kwargs):

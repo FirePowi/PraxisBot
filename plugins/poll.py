@@ -142,6 +142,7 @@ class PollPlugin(praxisbot.Plugin):
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('--duration', help='Duration of the poll in hours.')
+		parser.add_argument('--choices', nargs='*', help='List of emoji and decriptions. Ex: `👎 "No" 🤷 "Neutral" 👍 "Yes".`', default=["👎", "I disagree", "🤷", "Neutral", "👍", "I agree"])
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -155,14 +156,17 @@ class PollPlugin(praxisbot.Plugin):
 				if duration < 1:
 					raise ValueError
 			except ValueError:
-				scope.shell.print_error("Duration must be a number between 1 and 168")
+				await scope.shell.print_error(scope, "Duration must be a number between 1 and 168")
 				return
 
-		choices = [
-			{"emoji": "👎", "description": "\"I disagree\""},
-			{"emoji": "🤷", "description": "Neutral"},
-			{"emoji": "👍", "description": "\"I agree\""}
-		]
+		choices = []
+		choice_emoji = None
+		for c in args.choices:
+			if not choice_emoji:
+				choice_emoji = c
+			else:
+				choices.append({"emoji":choice_emoji, "description":c})
+				choice_emoji = None
 
 		description = "\n".join(lines)
 		text = description
@@ -174,7 +178,11 @@ class PollPlugin(praxisbot.Plugin):
 		msg = await scope.shell.client.send_message(scope.channel, text)
 
 		for c in choices:
-			await scope.shell.client.add_reaction(msg, c["emoji"])
+			try:
+				await scope.shell.client.add_reaction(msg, c["emoji"])
+			except:
+				await scope.shell.print_error(scope, "\""+c["emoji"]+"\" is not a valid emoji.")
+				return
 
 		end_time = datetime.datetime.now(timezone('UTC')) + datetime.timedelta(hours=duration)
 

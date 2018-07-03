@@ -99,6 +99,7 @@ class TriggerPlugin(praxisbot.Plugin):
 		subScope = scope.create_subscope()
 		subScope.prefixes = [""]
 		subScope.vars["params"] = options.strip()
+		subScope.permission = praxisbot.UserPermission.Script
 		await scope.shell.execute_script(subScope, script[0])
 		scope.continue_from_subscope(subScope)
 		return True
