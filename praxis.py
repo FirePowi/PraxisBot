@@ -120,7 +120,10 @@ class PraxisBot(discord.Client):
 						scope.user = s.me
 						scope.permission = praxisbot.UserPermission.Script
 
-						await p.on_loop(scope)
+						try:
+							await p.on_loop(scope)
+						except:
+							pass
 
 	async def on_message(self, message):
 		if message.channel.is_private:
@@ -197,7 +200,7 @@ class PraxisBot(discord.Client):
 		ban_author = ""
 		ban_target = ""
 		ban_reason = ""
-		
+
 		bans = await self.shell.client.get_ban_logs(member.server, limit=5)
 		for b in bans:
 			if b.target.id == member.id:
