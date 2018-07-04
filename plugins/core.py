@@ -119,8 +119,11 @@ class CorePlugin(praxisbot.Plugin):
 		parser.add_argument('--equal', help='Test if A = B', metavar='VALUE')
 		parser.add_argument('--hasroles', nargs='+', help='Test if a member has one of the listed roles', metavar='ROLE')
 		parser.add_argument('--ismember', action='store_true', help='Test if a parameter is a valid member')
+		parser.add_argument('--isrole', action='store_true', help='Test if a parameter is a valid role')
 		parser.add_argument('--not', dest='inverse', action='store_true', help='Inverse the result of the test')
 		parser.add_argument('--find', help='Return truc if an occurence of B is found in A (case insensitive)')
+		parser.add_argument('--inset', help='Return truc if B is in the set A')
+		parser.add_argument('--regex', help='Return true if A match the regular expression B')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -134,8 +137,26 @@ class CorePlugin(praxisbot.Plugin):
 			a = scope.format_text(args.firstvar).lower()
 			b = scope.format_text(args.find).lower()
 			res = (a.find(b) >= 0)
+		elif args.inset:
+			a = scope.format_text(args.firstvar).split("\n")
+			b = scope.format_text(args.inset)
+			res = (b in a)
+		elif args.regex:
+			a = scope.format_text(args.firstvar)
+			b = scope.format_text(args.regex)
+			try:
+				if re.search(b, a):
+					res = True
+				else:
+					res = False
+			except:
+				await scope.shell.print_error(scope, "The regular expression seems wrong.")
+				res = False
 		elif args.ismember:
 			u = scope.shell.find_member(scope.format_text(args.firstvar), scope.server)
+			res = (u != None)
+		elif args.isrole:
+			u = scope.shell.find_role(scope.format_text(args.firstvar), scope.server)
 			res = (u != None)
 		elif args.hasroles:
 			u = scope.shell.find_member(scope.format_text(args.firstvar), scope.server)
@@ -201,12 +222,13 @@ class CorePlugin(praxisbot.Plugin):
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('name', help='Variable name')
-		parser.add_argument('value', help='Variable value')
+		parser.add_argument('value', nargs='?', help='Variable value')
 		parser.add_argument('--global', dest='glob', action='store_true', help='Set the variable for all commands on this server')
-		parser.add_argument('--intadd', action='store_true', help='Add the integer value to the variable')
-		parser.add_argument('--intremove', action='store_true', help='Remove the integer value from the variable')
-		parser.add_argument('--setadd', action='store_true', help='Add element in the set')
-		parser.add_argument('--setremove', action='store_true', help='Remove element from the set')
+		parser.add_argument('--intadd', help='Add the integer value to the variable')
+		parser.add_argument('--intremove', help='Remove the integer value from the variable')
+		parser.add_argument('--setadd', nargs='+', help='Add elements in the set')
+		parser.add_argument('--setremove', nargs='+', help='Remove elements from the set')
+		parser.add_argument('--members', nargs='*', help='Get all members that are at least in one of the listed groups')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -217,15 +239,15 @@ class CorePlugin(praxisbot.Plugin):
 		var = scope.format_text(args.name)
 		self.ensure_object_name("Variable name", var)
 
-		val = scope.format_text(args.value)
-
 		if args.intadd:
+			val = scope.format_text(args.intadd)
 			try:
 				val = str(int(scope.vars[var]) + int(val))
 			except ValueError:
 				val = str(scope.vars[var])
 				pass
 		elif args.intremove:
+			val = scope.format_text(args.intremove)
 			try:
 				val = str(int(scope.vars[var]) - int(val))
 			except ValueError:
@@ -235,8 +257,12 @@ class CorePlugin(praxisbot.Plugin):
 			try:
 				if var in scope.vars:
 					s = set(str(scope.vars[var]).split("\n"))
-					s.add(val)
-					val = "\n".join(s)
+				else:
+					s = set()
+
+				for v in args.setadd:
+					s.add(scope.format_text(v))
+				val = "\n".join(s)
 			except ValueError:
 				val = str(scope.vars[var])
 				pass
@@ -244,11 +270,44 @@ class CorePlugin(praxisbot.Plugin):
 			try:
 				if var in scope.vars:
 					s = set(str(scope.vars[var]).split("\n"))
-					s.discard(val)
-					val = "\n".join(s)
+				else:
+					s = set()
+
+				for v in args.setremove:
+					s.discard(scope.format_text(v))
+				val = "\n".join(s)
 			except ValueError:
 				val = str(scope.vars[var])
 				pass
+		elif args.members != None:
+			if scope.permission < praxisbot.UserPermission.Script:
+				raise praxisbot.ScriptPermissionError()
+
+			role_list = set()
+			member_list = []
+			error = False
+			for r in args.members:
+				r_name = scope.format_text(r)
+				r_found = scope.shell.find_role(r_name, scope.server)
+				if r_found:
+					role_list.add(r_found)
+				else:
+					await scope.shell.print_error(scope, "`"+r_name+"` is not a valid role")
+					error = True
+			for m in scope.server.members:
+				if len(role_list) > 0:
+					for r in m.roles:
+						if not r.is_everyone and r in role_list:
+							member_list.append(m.name+"#"+m.discriminator)
+							break
+				elif not error:
+					member_list.append(m.name+"#"+m.discriminator)
+			val = "\n".join(member_list)
+
+		elif args.value:
+			val = scope.format_text(args.value)
+		else:
+			val = ""
 
 		scope.vars[var] = val
 
@@ -330,7 +389,8 @@ class CorePlugin(praxisbot.Plugin):
 			if args.thumbnail:
 				e.set_thumbnail(url=subScope.format_text(args.thumbnail))
 
-		await scope.shell.send_message(subScope.channel, formatedText, e)
+		if e or len(formatedText) > 0:
+			await scope.shell.send_message(subScope.channel, formatedText, e)
 
 	@praxisbot.command
 	@praxisbot.permission_script

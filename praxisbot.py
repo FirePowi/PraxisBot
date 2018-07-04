@@ -261,6 +261,15 @@ class ExecutionScope:
 				tagOutput = str(u.created_at)
 			elif tag.lower() == "user_avatar" and u:
 				tagOutput = str(u.avatar_url.replace(".webp", ".png"))
+			elif tag[0] == "*" and tag[1:] in self.vars:
+				if len(self.vars[tag[1:]].strip()) == 0:
+					tagOutput = 0
+				else:
+					s = self.vars[tag[1:]].split("\n")
+					tagOutput = str(len(s))
+			elif tag[0] == "," and tag[1:] in self.vars:
+				s = self.vars[tag[1:]].split("\n")
+				tagOutput = ", ".join(s)
 			elif tag in self.vars:
 				tagOutput = self.vars[tag]
 			formatedText = formatedText + str(tagOutput)
