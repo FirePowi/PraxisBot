@@ -25,6 +25,8 @@ import discord
 import copy
 import inspect
 import datetime
+from pytz import timezone
+from dateutil.relativedelta import relativedelta
 import praxisbot
 from io import StringIO
 
@@ -120,10 +122,13 @@ class CorePlugin(praxisbot.Plugin):
 		parser.add_argument('--hasroles', nargs='+', help='Test if a member has one of the listed roles', metavar='ROLE')
 		parser.add_argument('--ismember', action='store_true', help='Test if a parameter is a valid member')
 		parser.add_argument('--isrole', action='store_true', help='Test if a parameter is a valid role')
+		parser.add_argument('--isdate', action='store_true', help='Test if a parameter is a valid date')
 		parser.add_argument('--not', dest='inverse', action='store_true', help='Inverse the result of the test')
 		parser.add_argument('--find', help='Return truc if an occurence of B is found in A (case insensitive)')
 		parser.add_argument('--inset', help='Return truc if B is in the set A')
 		parser.add_argument('--regex', help='Return true if A match the regular expression B')
+		parser.add_argument('--inf', help='Return true if A is inferior to B')
+		parser.add_argument('--sup', help='Return true if A is superior to B')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -133,6 +138,26 @@ class CorePlugin(praxisbot.Plugin):
 			a = scope.format_text(args.firstvar)
 			b = scope.format_text(args.equal)
 			res = (a == b)
+		elif args.inf:
+			a = scope.format_text(args.firstvar)
+			b = scope.format_text(args.inf)
+
+			try:
+				ia = int(a)
+				ib = int(b)
+				res = (ia < ib)
+			except:
+				res = (a < b)
+		elif args.sup:
+			a = scope.format_text(args.firstvar)
+			b = scope.format_text(args.sup)
+
+			try:
+				ia = int(a)
+				ib = int(b)
+				res = (ia > ib)
+			except:
+				res = (a > b)
 		elif args.find:
 			a = scope.format_text(args.firstvar).lower()
 			b = scope.format_text(args.find).lower()
@@ -158,6 +183,12 @@ class CorePlugin(praxisbot.Plugin):
 		elif args.isrole:
 			u = scope.shell.find_role(scope.format_text(args.firstvar), scope.server)
 			res = (u != None)
+		elif args.isdate:
+			try:
+				start_time = datetime.datetime.strptime(scope.format_text(args.firstvar), "%Y-%m-%d %H:%M:%S")
+				res = True
+			except ValueError:
+				res = False
 		elif args.hasroles:
 			u = scope.shell.find_member(scope.format_text(args.firstvar), scope.server)
 			r = []
@@ -224,6 +255,7 @@ class CorePlugin(praxisbot.Plugin):
 		parser.add_argument('name', help='Variable name')
 		parser.add_argument('value', nargs='?', help='Variable value')
 		parser.add_argument('--global', dest='glob', action='store_true', help='Set the variable for all commands on this server')
+		parser.add_argument('--dateadd', help='Add a duration to a date. YYYY-MM-DD HH:MM:SS')
 		parser.add_argument('--intadd', help='Add the integer value to the variable')
 		parser.add_argument('--intremove', help='Remove the integer value from the variable')
 		parser.add_argument('--setadd', nargs='+', help='Add elements in the set')
@@ -239,19 +271,40 @@ class CorePlugin(praxisbot.Plugin):
 		var = scope.format_text(args.name)
 		self.ensure_object_name("Variable name", var)
 
-		if args.intadd:
+		if args.dateadd:
+			try:
+				d = datetime.datetime.strptime(scope.vars.get(var, ""), "%Y-%m-%d %H:%M:%S")
+				d = timezone('Europe/Paris').localize(d)
+			except:
+				d = datetime.datetime.now(timezone('Europe/Paris'))
+
+			r = re.match("([0-9]+)-([0-9]+)-([0-9]+) ([0-9]+):([0-9]+):([0-9]+)", scope.format_text(args.dateadd))
+			if r:
+				years = int(r.group(1))
+				months = int(r.group(2))
+				days = int(r.group(3))
+				hours = int(r.group(4))
+				minutes = int(r.group(5))
+				seconds = int(r.group(6))
+				delta = relativedelta(years=years, months=months, days=days, hours=hours, minutes=minutes, seconds=seconds)
+				new_time = d + delta
+				val = new_time.strftime("%Y-%m-%d %H:%M:%S")
+			#except:
+			#	val = scope.vars.get(var, "")
+
+		elif args.intadd:
 			val = scope.format_text(args.intadd)
 			try:
-				val = str(int(scope.vars[var]) + int(val))
+				val = str(int(scope.vars.get(var, 0)) + int(val))
 			except ValueError:
-				val = str(scope.vars[var])
+				val = str(scope.vars.get(var, ""))
 				pass
 		elif args.intremove:
 			val = scope.format_text(args.intremove)
 			try:
-				val = str(int(scope.vars[var]) - int(val))
+				val = str(int(scope.vars.get(var, 0)) - int(val))
 			except ValueError:
-				val = str(scope.vars[var])
+				val = str(scope.vars.get(var, ""))
 				pass
 		elif args.setadd:
 			try:
@@ -312,7 +365,7 @@ class CorePlugin(praxisbot.Plugin):
 		scope.vars[var] = val
 
 		if args.glob:
-			scope.shell.set_sql_data("variables", {"discord_sid": int(scope.server.id), "name": str(var)}, {"value":str(val)})
+			scope.shell.set_sql_data("variables", {"value":str(val)}, {"discord_sid": int(scope.server.id), "name": str(var)})
 
 		await scope.shell.print_success(scope, "`"+str(var)+"` is now equal to:\n```\n"+str(val)+"```")
 

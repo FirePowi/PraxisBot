@@ -147,12 +147,16 @@ class PraxisBot(discord.Client):
 		elif message.author.server_permissions.administrator:
 			scope.permission = praxisbot.UserPermission.Admin
 
-		if await self.shell.execute_command(scope, message.content):
-			if scope.deletecmd:
-				try:
-					await self.shell.client.delete_message(message)
-				except:
-					pass
+		command_found = await self.shell.execute_command(scope, message.content)
+
+		for p in self.shell.plugins:
+			await p.on_message(scope, message, command_found)
+
+		if command_found and scope.deletecmd:
+			try:
+				await self.shell.client.delete_message(message)
+			except:
+				pass
 
 
 	async def on_member_join(self, member):

@@ -29,6 +29,7 @@ import random
 import sqlite3
 import discord
 import datetime
+from pytz import timezone
 from functools import wraps
 
 class RedirectOutput():
@@ -71,6 +72,11 @@ class CommandNotFoundError(Error):
 		self.command = command
 
 class ObjectNameError(Error):
+	def __init__(self, parameter, name):
+		self.parameter = parameter
+		self.name = name
+
+class ObjectIdError(Error):
 	def __init__(self, parameter, name):
 		self.parameter = parameter
 		self.name = name
@@ -235,6 +241,15 @@ class ExecutionScope:
 				c = self.shell.find_channel(subChan, self.server)
 				tag = channel_chk.group(1)
 
+			r = None
+			role_chk = re.fullmatch('([*@]?role)=(.*)', tag)
+			if role_chk:
+				subRole = role_chk.group(2).strip()
+				if subRole in self.vars:
+					subRole = self.vars[subRole]
+				r = self.shell.find_role(subRole, self.server)
+				tag = role_chk.group(1)
+
 			if tag.lower() == "server" and self.server:
 				tagOutput = self.server.name
 			elif tag.lower() == "*server" and self.server:
@@ -242,13 +257,20 @@ class ExecutionScope:
 			elif tag.lower() == "n":
 				tagOutput = "\n"
 			elif tag.lower() == "now":
-				tagOutput = str(datetime.datetime.now())
+				d = datetime.datetime.now(timezone('Europe/Paris'))
+				tagOutput = d.strftime("%Y-%m-%d %H:%M:%S")
 			elif tag.lower() == "channel" and c:
 				tagOutput = c.name
 			elif tag.lower() == "#channel" and c:
 				tagOutput = c.mention
 			elif tag.lower() == "*channel" and c:
 				tagOutput = c.id
+			elif tag.lower() == "role" and r:
+				tagOutput = r.name
+			elif tag.lower() == "@role" and r:
+				tagOutput = r.mention
+			elif tag.lower() == "*role" and r:
+				tagOutput = r.id
 			elif tag.lower() == "#user" and u:
 				tagOutput = u.name+"#"+u.discriminator
 			elif tag.lower() == "@user" and u:
@@ -272,6 +294,8 @@ class ExecutionScope:
 				tagOutput = ", ".join(s)
 			elif tag in self.vars:
 				tagOutput = self.vars[tag]
+			else:
+				tagOutput = ""
 			formatedText = formatedText + str(tagOutput)
 
 		formatedText = formatedText + text[textIter:]
@@ -383,6 +407,9 @@ class Shell:
 			scope.abort = True
 		except ObjectNameError as e:
 			await self.print_error(scope, e.parameter+" must be a letter followed by alphanumeric characters.");
+			scope.abort = True
+		except ObjectIdError as e:
+			await self.print_error(scope, e.parameter+" must be a number.");
 			scope.abort = True
 		except sqlite3.OperationalError as e:
 			print(traceback.format_exc())
@@ -706,6 +733,9 @@ class Plugin:
 	async def on_unban(self, scope):
 		return False
 
+	async def on_message(self, scope, message, command_found):
+		return False
+
 	def add_command(self, name, cmd):
 		self.cmds[name] = cmd
 
@@ -735,6 +765,10 @@ class Plugin:
 	def ensure_object_name(self, parameter, name):
 		if not re.fullmatch('[a-zA-Z_][a-zA-Z0-9_]*', name):
 			raise ObjectNameError(parameter, name)
+
+	def ensure_object_id(self, parameter, name):
+		if not re.fullmatch('[0-9_]+', name):
+			raise ObjectIdError(parameter, name)
 
 ################################################################################
 # MessageStream
