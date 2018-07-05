@@ -312,7 +312,7 @@ class TriggerPlugin(praxisbot.Plugin):
 			return
 
 		stream = praxisbot.MessageStream(scope)
-		await stream.send("**List of commands**\n")
+		await stream.send("__**List of commands**__\n")
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()

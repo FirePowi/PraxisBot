@@ -162,6 +162,7 @@ class ExecutionScope:
 
 		self.iter = 0
 		self.vars = {}
+		self.session_vars = {}
 		self.blocks = []
 		self.abort = False
 		self.deletecmd = False
@@ -190,6 +191,7 @@ class ExecutionScope:
 
 		subScope.iter = self.iter
 		subScope.vars = self.vars
+		subScope.session_vars = self.session_vars
 		subScope.blocks = self.blocks
 		subScope.abort = self.abort
 		subScope.deletecmd = self.deletecmd
@@ -199,6 +201,7 @@ class ExecutionScope:
 	def continue_from_subscope(self, subScope):
 		self.iter = subScope.iter
 		self.vars = subScope.vars
+		self.session_vars = subScope.session_vars
 		self.abort = subScope.abort
 		self.deletecmd = subScope.deletecmd
 

@@ -255,6 +255,7 @@ class CorePlugin(praxisbot.Plugin):
 		parser.add_argument('name', help='Variable name')
 		parser.add_argument('value', nargs='?', help='Variable value')
 		parser.add_argument('--global', dest='glob', action='store_true', help='Set the variable for all commands on this server')
+		parser.add_argument('--session', action='store_true', help='Set the variable for an user session')
 		parser.add_argument('--dateadd', help='Add a duration to a date. YYYY-MM-DD HH:MM:SS')
 		parser.add_argument('--intadd', help='Add the integer value to the variable')
 		parser.add_argument('--intremove', help='Remove the integer value from the variable')
@@ -363,6 +364,9 @@ class CorePlugin(praxisbot.Plugin):
 			val = ""
 
 		scope.vars[var] = val
+
+		if args.session:
+			scope.session_vars[var] = val
 
 		if args.glob:
 			scope.shell.set_sql_data("variables", {"value":str(val)}, {"discord_sid": int(scope.server.id), "name": str(var)})

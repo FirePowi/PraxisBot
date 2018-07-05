@@ -38,6 +38,7 @@ from plugins.moderation import ModerationPlugin
 from plugins.board import BoardPlugin
 from plugins.archive import ArchivePlugin
 from plugins.poll import PollPlugin
+from plugins.conversational_form import ConversationalFormPlugin
 from plugins.emoji import EmojiPlugin
 from plugins.http import HTTPPlugin
 
@@ -95,6 +96,7 @@ class PraxisBot(discord.Client):
 		self.shell.load_plugin(BoardPlugin)
 		self.shell.load_plugin(ArchivePlugin)
 		self.shell.load_plugin(PollPlugin)
+		self.shell.load_plugin(ConversationalFormPlugin)
 		self.shell.load_plugin(EmojiPlugin)
 		self.shell.load_plugin(HTTPPlugin)
 
