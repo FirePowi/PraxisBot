@@ -71,6 +71,7 @@ class TriggerPlugin(praxisbot.Plugin):
 						subScope.user = message.author
 						subScope.channel = message.channel
 						subScope.vars["params"] = message.content
+						subScope.verbose = 1
 						await scope.shell.execute_script(subScope, row[1])
 				except:
 					pass
@@ -122,6 +123,7 @@ class TriggerPlugin(praxisbot.Plugin):
 		subScope.prefixes = [""]
 		subScope.vars["params"] = options.strip()
 		subScope.permission = praxisbot.UserPermission.Script
+		subScope.verbose = 1
 		await scope.shell.execute_script(subScope, script[0])
 		scope.continue_from_subscope(subScope)
 		return True

@@ -87,13 +87,14 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		subScope.user = user
 		subScope.channel = channel
 		subScope.permission = praxisbot.UserPermission.Script
+		subScope.verbose = 1
 
 		for v in self.sessions[key].vars:
 			subScope.session_vars[v] = self.sessions[key].vars[v]
 			subScope.vars[v] = self.sessions[key].vars[v]
 
 		await scope.shell.execute_script(subScope, script)
-		
+
 		for v in subScope.session_vars:
 			self.sessions[key].vars[v] = subScope.session_vars[v]
 		self.sessions[key].last_time = datetime.datetime.now()
@@ -237,8 +238,9 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 					await stream.send("\n - Incoming link: "+link[0]+" → **"+str(row[0])+"**")
 				for link in c1.execute("SELECT node_end, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND node_end != node_start ORDER BY node_end", [int(scope.server.id), str(row[0])]):
 					await stream.send("\n - Outcoming link: **"+str(row[0])+"** → "+link[0])
-				await stream.send("\n - Script:")
-				await stream.send("\n```\n"+row[1]+"\n```")
+				if len(row[1]) > 0:
+					await stream.send("\n - Script:")
+					await stream.send("\n```\n"+row[1]+"\n```")
 
 			await stream.send("\n\n__**List of links**__")
 			for row in c0.execute("SELECT node_start, node_end, script, type, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? ORDER BY node_start, node_end", [int(scope.server.id)]):
@@ -247,8 +249,9 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 					await stream.send("\n - Condition: user message match `"+row[4]+"`")
 				elif row[3] == LinkType.Timeout:
 					await stream.send("\n - Condition: timeout of "+row[4]+"")
-				await stream.send("\n - Script:")
-				await stream.send("\n```\n"+row[2]+"\n```")
+				if len(row[2]) > 0:
+					await stream.send("\n - Script:")
+					await stream.send("\n```\n"+row[2]+"\n```")
 
 		await stream.finish()
 
@@ -273,7 +276,6 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 
 		self.start_session(scope.user, scope.channel, scope.server, args.node)
 		await self.execute_session_node(scope.user, scope.channel, scope.server, scope)
-		await scope.shell.print_success(scope, "Conversational session  started.")
 
 	@praxisbot.command
 	@praxisbot.permission_script
@@ -292,7 +294,6 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 			return
 
 		self.end_session(scope.user, scope.channel, scope.server)
-		await scope.shell.print_success(scope, "Conversational session ended.")
 
 
 	@praxisbot.command

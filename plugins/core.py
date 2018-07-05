@@ -55,6 +55,7 @@ class CorePlugin(praxisbot.Plugin):
 		self.add_command("regex", self.execute_regex)
 		self.add_command("whois", self.execute_whois)
 		self.add_command("delete_message", self.execute_delete_message)
+		self.add_command("verbose", self.execute_verbose)
 		self.add_command("silent", self.execute_silent)
 
 	@praxisbot.command
@@ -92,6 +93,7 @@ class CorePlugin(praxisbot.Plugin):
 
 		subScope = scope.create_subscope()
 		subScope.prefixes = [""]
+		subScope.verbose = 1
 		await scope.shell.execute_script(subScope, "\n".join(lines))
 		scope.continue_from_subscope(subScope)
 
@@ -121,6 +123,7 @@ class CorePlugin(praxisbot.Plugin):
 		parser.add_argument('--equal', help='Test if A = B', metavar='VALUE')
 		parser.add_argument('--hasroles', nargs='+', help='Test if a member has one of the listed roles', metavar='ROLE')
 		parser.add_argument('--ismember', action='store_true', help='Test if a parameter is a valid member')
+		parser.add_argument('--iswritable', action='store_true', help='Test if a parameter is a writable text channel')
 		parser.add_argument('--isrole', action='store_true', help='Test if a parameter is a valid role')
 		parser.add_argument('--isdate', action='store_true', help='Test if a parameter is a valid date')
 		parser.add_argument('--not', dest='inverse', action='store_true', help='Inverse the result of the test')
@@ -180,6 +183,9 @@ class CorePlugin(praxisbot.Plugin):
 		elif args.ismember:
 			u = scope.shell.find_member(scope.format_text(args.firstvar), scope.server)
 			res = (u != None)
+		elif args.iswritable:
+			c = scope.shell.find_channel(scope.format_text(args.firstvar), scope.server)
+			res = (c and c.permissions_for(scope.user).send_messages and c.permissions_for(scope.user).read_messages)
 		elif args.isrole:
 			u = scope.shell.find_role(scope.format_text(args.firstvar), scope.server)
 			res = (u != None)
@@ -624,6 +630,19 @@ class CorePlugin(praxisbot.Plugin):
 			return
 
 		scope.deletecmd = True
+
+	@praxisbot.command
+	async def execute_verbose(self, scope, command, options, lines, **kwargs):
+		"""
+		Print all messages.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		scope.verbose = 2
 
 	@praxisbot.command
 	async def execute_silent(self, scope, command, options, lines, **kwargs):

@@ -328,6 +328,11 @@ class Shell:
 			await self.client.send_message(scope.channel, msg)
 		return
 
+	async def print_debug(self, scope, msg):
+		if scope.verbose >= 3:
+			await self.client.send_message(scope.channel, ":large_blue_circle: "+msg)
+		return
+
 	async def print_success(self, scope, msg):
 		if scope.verbose >= 2:
 			await self.client.send_message(scope.channel, ":white_check_mark: "+msg)
@@ -367,6 +372,8 @@ class Shell:
 				lines = commandline.split("\n")
 				command = lines[0].split(" ")[0:1][0].strip()
 				options = lines[0][len(command):].strip()
+				if len(command.strip()) == 0:
+					return None
 				return (command, options, lines[1:])
 		return None
 

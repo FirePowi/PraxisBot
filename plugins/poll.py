@@ -164,11 +164,25 @@ class PollPlugin(praxisbot.Plugin):
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('--duration', help='Duration of the poll in hours.')
 		parser.add_argument('--description', help='Description of the poll.')
+		parser.add_argument('--channel', help='Channel where the poll will be created.')
 		parser.add_argument('--short', action='store_true', help='Remove all explanations except the description.')
 		parser.add_argument('--live', action='store_true', help='Display results in real time.')
 		parser.add_argument('--choices', nargs='*', help='List of emoji and decriptions. Ex: `👎 "No" 🤷 "Neutral" 👍 "Yes".`', default=["👎", "I disagree", "🤷", "Neutral", "👍", "I agree"])
 		args = await self.parse_options(scope, parser, options)
 		if not args:
+			return
+
+		if args.channel:
+			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.server)
+		else:
+			chan = scope.channel
+
+		if not chan:
+			await scope.shell.print_error(scope, "Unknown channel.")
+			return
+
+		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).send_messages:
+			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
 			return
 
 		poll_type = PollType.Default
@@ -213,7 +227,7 @@ class PollPlugin(praxisbot.Plugin):
 				text = text+"\n\n"+c["emoji"]+" : "+c["description"]
 			text = text+"\n\nVoters: "+str(0)
 
-		msg = await scope.shell.client.send_message(scope.channel, text)
+		msg = await scope.shell.client.send_message(chan, text)
 
 		for c in choices:
 			try:
@@ -222,7 +236,7 @@ class PollPlugin(praxisbot.Plugin):
 				await scope.shell.print_error(scope, "\""+c["emoji"]+"\" is not a valid emoji.")
 				return
 
-		poll_id = scope.shell.add_sql_data("polls", {"discord_sid": int(msg.server.id), "discord_cid": int(msg.channel.id), "discord_mid": int(msg.id), "description": description, "end_time": str(end_time), "type":int(poll_type)})
+		poll_id = scope.shell.add_sql_data("polls", {"discord_sid": int(msg.server.id), "discord_cid": int(chan.id), "discord_mid": int(msg.id), "description": description, "end_time": str(end_time), "type":int(poll_type)})
 
 		for c in choices:
 			scope.shell.add_sql_data("poll_choices", {"poll": poll_id, "emoji": c["emoji"], "description": c["description"]})
