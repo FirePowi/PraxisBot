@@ -287,8 +287,11 @@ class RoleListPlugin(praxisbot.Plugin):
 		for m in scope.server.members:
 			for r in m.roles:
 				if r.id == role.id:
-					await stream.send_monospace("\n"+m.name+"#"+m.discriminator)
+					members.append(m.name+"#"+m.discriminator)
 					break
+		members.sort()
+		for m in members:
+			await stream.send_monospace("\n"+m)
 
 		await stream.finish()
 

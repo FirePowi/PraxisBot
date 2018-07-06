@@ -797,7 +797,10 @@ class MessageStream:
 		if self.monospace:
 			self.text = self.text+"\n```"
 		await self.scope.shell.client.send_message(self.scope.channel, self.text)
-		self.text = ""
+		if self.monospace:
+			self.text = "```\n"
+		else:
+			self.text = ""
 
 	async def send(self, text):
 		if self.monospace:
