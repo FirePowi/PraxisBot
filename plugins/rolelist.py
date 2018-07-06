@@ -230,7 +230,7 @@ class RoleListPlugin(praxisbot.Plugin):
 				"onlinelist":r.hoist,
 				"autosort":0,
 				"autosync":0,
-				"color":r.colour
+				"color":r.colour.value
 			}
 
 		for m in scope.server.members:
@@ -270,7 +270,7 @@ class RoleListPlugin(praxisbot.Plugin):
 			else:
 				icon = ""
 
-				if r["color"]:
+				if r["onlinelist"]:
 					icon = icon+":medal:"
 				else:
 					icon = icon+":label:"
