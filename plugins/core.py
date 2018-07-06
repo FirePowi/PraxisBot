@@ -57,6 +57,7 @@ class CorePlugin(praxisbot.Plugin):
 		self.add_command("delete_message", self.execute_delete_message)
 		self.add_command("verbose", self.execute_verbose)
 		self.add_command("silent", self.execute_silent)
+		self.add_command("cite", self.execute_cite)
 
 	@praxisbot.command
 	async def execute_help(self, scope, command, options, lines, **kwargs):
@@ -224,7 +225,6 @@ class CorePlugin(praxisbot.Plugin):
 		"""
 
 		for b in scope.blocks:
-			print(type(b).__name__)
 			if type(b).__name__ == "ExecutionBlockFor":
 				await scope.shell.print_error(scope, "Only one level of loop is allowed.")
 				scope.abort = True
@@ -408,13 +408,18 @@ class CorePlugin(praxisbot.Plugin):
 		"""
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
-		parser.add_argument('message', help='Text to send')
+		parser.add_argument('message', nargs="?", help='Text to send')
 		parser.add_argument('--channel', '-c', help='Channel where to send the message')
 		parser.add_argument('--title', '-t', help='Embed title')
 		parser.add_argument('--description', '-d', help='Embed description')
 		parser.add_argument('--footer', '-f', help='Embed footer')
+		parser.add_argument('--footerimage', help='Embed footer image')
 		parser.add_argument('--image', '-i', help='Embed image')
 		parser.add_argument('--thumbnail', '-m', help='Embed thumbnail')
+		parser.add_argument('--author', '-a', help='Embed author name')
+		parser.add_argument('--authorimage', help='Embed author image')
+		parser.add_argument('--authorurl', help='Embed author URL')
+		parser.add_argument('--fields', nargs="+", help='List of key/value')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -435,22 +440,50 @@ class CorePlugin(praxisbot.Plugin):
 		subScope = scope.create_subscope()
 		subScope.channel = chan
 
-		formatedText = subScope.format_text(args.message)
+		formatedText = ""
+		if args.message:
+			formatedText = subScope.format_text(args.message)
 
 		e = None
-		if args.title or args.description or args.footer or args.image or args.thumbnail:
+		if args.title or args.description or args.footer or args.footerimage or args.image or args.thumbnail or args.author or args.authorimage or args.authorurl or args.fields:
 			e = discord.Embed();
 			e.type = "rich"
+
 			if args.title:
 				e.title = subScope.format_text(args.title)
 			if args.description:
 				e.description = subScope.format_text(args.description)
-			if args.footer:
-				e.set_footer(text=subScope.format_text(args.footer))
 			if args.image:
 				e.set_image(url=subScope.format_text(args.image))
 			if args.thumbnail:
 				e.set_thumbnail(url=subScope.format_text(args.thumbnail))
+
+			footer_params = {}
+			if args.footer:
+				footer_params["text"] = subScope.format_text(args.footer)
+			if args.footerimage:
+				footer_params["icon_url"] = subScope.format_text(args.footerimage)
+			if len(footer_params) > 0:
+				e.set_footer(**footer_params)
+
+			author_params = {}
+			if args.author:
+				author_params["name"] = subScope.format_text(args.author)
+			if args.authorimage:
+				author_params["icon_url"] = subScope.format_text(args.authorimage)
+			if args.authorurl:
+				author_params["url"] = subScope.format_text(args.authorurl)
+			if len(author_params) > 0:
+				e.set_author(**author_params)
+
+			if args.fields:
+				field_key = None
+				for f in args.fields:
+					if not field_key:
+						field_key = f
+					else:
+						e.add_field(name=subScope.format_text(field_key), value=subScope.format_text(f))
+						field_key = None
 
 		if e or len(formatedText) > 0:
 			await scope.shell.send_message(subScope.channel, formatedText, e)
@@ -683,3 +716,69 @@ class CorePlugin(praxisbot.Plugin):
 			return
 
 		scope.verbose = 0
+
+	@praxisbot.command
+	async def execute_cite(self, scope, command, options, lines, **kwargs):
+		"""
+		Don't print any feedback during execution.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('messageid', help='Message ID to cite')
+		parser.add_argument('--channel', help='Channel where the cited message is')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		if args.channel:
+			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.server)
+		else:
+			chan = scope.channel
+
+		if not chan:
+			await scope.shell.print_error(scope, "Unknown channel.")
+			return
+
+		if not chan.permissions_for(scope.user).read_messages:
+			await scope.shell.print_permission(scope, "You don't have read permission in this channel.")
+			return
+
+		msg = None
+		try:
+			msg = await scope.shell.client.get_message(chan, args.messageid)
+		except discord.errors.NotFound:
+			msg = None
+
+		if not msg:
+			await scope.shell.print_error(scope, "Message not found `"+args.messageid+"`.")
+			return
+
+		msg_deltatime = datetime.datetime.utcnow() - msg.timestamp
+		duration = ""
+		if msg_deltatime.days > 1:
+			duration = ", "+str(msg_deltatime.days)+" days ago"
+		elif msg_deltatime.days == 1:
+			duration = ", yesterday"
+		elif msg_deltatime.seconds > 3600:
+			hours = int(msg_deltatime.seconds/3600)
+			if hours == 1:
+				duration = ", one hour ago"
+			else:
+				duration = ", "+str(hours)+" hours ago"
+		elif msg_deltatime.seconds > 60:
+			minutes = int(msg_deltatime.seconds/60)
+			if minutes == 1:
+				duration = ", one minute ago"
+			else:
+				duration = ", "+str(minutes)+" minutes ago"
+		else:
+			duration = ", "+str(msg_deltatime.seconds)+" seconds ago"
+
+		e = discord.Embed();
+		e.type = "rich"
+		e.set_author(name=msg.author.display_name+duration+" in #"+chan.name, icon_url=msg.author.avatar_url.replace(".webp", ".png"))
+		e.description = msg.content
+		e.set_footer(text="Cited by "+scope.user.display_name)
+
+		await scope.shell.client.send_message(scope.channel, "", embed=e)
+		scope.deletecmd = True
