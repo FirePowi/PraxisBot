@@ -583,25 +583,52 @@ class CorePlugin(praxisbot.Plugin):
 
 		e = discord.Embed();
 		e.type = "rich"
-		e.title = u.name+"#"+u.discriminator
+		e.set_author(name=u.name+"#"+u.discriminator, icon_url=u.avatar_url.replace(".webp", ".png"))
 		e.set_thumbnail(url=u.avatar_url.replace(".webp", ".png"))
 
 		e.add_field(name="Nickname", value=str(u.display_name))
 		e.add_field(name="Discord ID", value=str(u.id))
-		e.add_field(name="Created since", value=str(datetime.datetime.now() - u.created_at))
-		e.add_field(name="Joined since", value=str(datetime.datetime.now() - u.joined_at))
+		if u.colour.value != 0:
+			e.colour = u.colour
+
+		e.add_field(name="Created since", value=str(datetime.datetime.utcnow() - u.created_at))
+		e.add_field(name="Joined since", value=str(datetime.datetime.utcnow() - u.joined_at))
+
+		if u.server_permissions.administrator:
+			e.add_field(name="Administrator", value=":crown: Yes")
+		if u.server_permissions.manage_server:
+			e.add_field(name="Manage server", value=":tools: Yes")
+		if u.server_permissions.manage_channels:
+			e.add_field(name="Manage channels", value=":tools: Yes")
+		if u.server_permissions.manage_messages:
+			e.add_field(name="Manage messages", value=":speech_balloon: Yes")
+		if u.server_permissions.view_audit_logs:
+			e.add_field(name="View audit logs", value=":eye: Yes")
+		if u.server_permissions.ban_members:
+			e.add_field(name="Ban members", value=":punch: Yes")
+		if u.server_permissions.kick_members:
+			e.add_field(name="Kick members", value=":punch: Yes")
+		if u.server_permissions.mention_everyone:
+			e.add_field(name="Mention everyone", value=":loudspeaker: Yes")
+
+		try:
+			counter = await scope.shell.client_human.count_messages(scope.server, author=u)
+			e.add_field(name="Total messages", value=str(counter))
+		except:
+			pass
+
+		try:
+			counter = await scope.shell.client_human.count_messages(scope.server, author=u, after=datetime.datetime.utcnow() - relativedelta(months=1))
+			e.add_field(name="Messages last month", value=str(counter))
+		except:
+			pass
+
 		roles = []
 		for r in u.roles:
 			if not r.is_everyone:
 				roles.append(r.name)
 		if len(roles):
 			e.add_field(name="Roles", value=", ".join(roles))
-
-		try:
-			counter = await scope.shell.client_human.count_messages(scope.server, author=u)
-			e.add_field(name="Activity", value=str(counter)+" messages")
-		except:
-			pass
 
 		try:
 			profile = await scope.shell.client_human.get_user_profile(u.id)

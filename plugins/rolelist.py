@@ -45,6 +45,8 @@ class RoleListPlugin(praxisbot.Plugin):
 		self.shell.create_sql_table("role_options", ["id INTEGER PRIMARY KEY", "discord_sid INTEGER", "discord_rid INTEGER", "description TEXT", "type INTEGER", "autosort INTEGER", "autosync INTEGER"])
 
 		self.add_command("edit_role", self.execute_edit_role)
+		self.add_command("role_info", self.execute_role_info)
+		self.add_command("role_members", self.execute_role_members)
 		self.add_command("roles", self.execute_roles)
 
 	async def on_loop(self, scope):
@@ -203,6 +205,95 @@ class RoleListPlugin(praxisbot.Plugin):
 		await scope.shell.print_success(scope, "Role edited.")
 
 	@praxisbot.command
+	async def execute_role_info(self, scope, command, options, lines, **kwargs):
+		"""
+		Display information about a role.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('role', help='Role to edit.')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		role = scope.shell.find_role(args.role, scope.server)
+		if not role:
+			await scope.shell.print_error(scope, "Role `"+args.role+"` not found.")
+			return
+
+		members = []
+		for m in scope.server.members:
+			for r in m.roles:
+				if r.id == role.id:
+					members.append(m.name+"#"+m.discriminator)
+					break
+
+		e = discord.Embed();
+		e.type = "rich"
+		e.title = role.name
+		if role.colour.value != 0:
+			e.colour = role.colour
+
+		options = scope.shell.get_sql_data("role_options", ["description", "type", "autosort", "autosync"], {"discord_sid": int(scope.server.id), "discord_rid":int(role.id)})
+		if options:
+			e.description = options[0]
+
+		e.add_field(name="Discord ID", value=str(role.id))
+		e.add_field(name="Members", value=str(len(members)))
+		e.add_field(name="Mentionable", value=str(":bell: Yes" if role.mentionable else ":no_bell: No"))
+		e.add_field(name="Visible in member list", value=str(":medal: Yes" if role.hoist else ":label: No"))
+		e.add_field(name="Colored", value=str(":art: Yes" if role.colour.value != 0 else ":black_circle: No"))
+
+		if role.permissions.administrator:
+			e.add_field(name="Administrator", value=":crown: Yes")
+		if role.permissions.manage_server:
+			e.add_field(name="Manage server", value=":tools: Yes")
+		if role.permissions.manage_channels:
+			e.add_field(name="Manage channels", value=":tools: Yes")
+		if role.permissions.manage_messages:
+			e.add_field(name="Manage messages", value=":speech_balloon: Yes")
+		if role.permissions.view_audit_logs:
+			e.add_field(name="View audit logs", value=":eye: Yes")
+		if role.permissions.ban_members:
+			e.add_field(name="Ban members", value=":punch: Yes")
+		if role.permissions.kick_members:
+			e.add_field(name="Kick members", value=":punch: Yes")
+		if role.permissions.mention_everyone:
+			e.add_field(name="Mention everyone", value=":loudspeaker: Yes")
+
+		await scope.shell.client.send_message(scope.channel, "", embed=e)
+
+	@praxisbot.command
+	async def execute_role_members(self, scope, command, options, lines, **kwargs):
+		"""
+		Display members of a role.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('role', help='Role to edit.')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		role = scope.shell.find_role(args.role, scope.server)
+		if not role:
+			await scope.shell.print_error(scope, "Role `"+args.role+"` not found.")
+			return
+
+		stream = praxisbot.MessageStream(scope)
+		await stream.send("__**Members of the role "+role.name+"**__\n")
+
+		members = []
+		for m in scope.server.members:
+			for r in m.roles:
+				if r.id == role.id:
+					await stream.send_monospace("\n"+m.name+"#"+m.discriminator)
+					break
+
+		await stream.finish()
+
+
+	@praxisbot.command
 	async def execute_roles(self, scope, command, options, lines, **kwargs):
 		"""
 		List all roles.
@@ -252,7 +343,7 @@ class RoleListPlugin(praxisbot.Plugin):
 
 		stream = praxisbot.MessageStream(scope)
 		await stream.send("__**List of roles**__\n")
-		await stream.send("\n**Properties:** :medal: visible in online list, :label: invisible in online list, :bell: mentionable, :no_bell: not mentionable, :art: colored, :black_circle: default color\n")
+		await stream.send("\n**Properties:** :medal: visible in member list, :label: invisible in member list, :bell: mentionable, :no_bell: not mentionable, :art: colored, :black_circle: default color\n")
 
 		role_above = 0
 

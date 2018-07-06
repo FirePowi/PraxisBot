@@ -791,12 +791,30 @@ class MessageStream:
 	def __init__(self, scope):
 		self.scope = scope
 		self.text = ""
+		self.monospace = False
 
 	async def flush(self):
+		if self.monospace:
+			self.text = self.text+"\n```"
 		await self.scope.shell.client.send_message(self.scope.channel, self.text)
 		self.text = ""
 
 	async def send(self, text):
+		if self.monospace:
+			self.monospace = False
+			self.text = self.text+"\n```"
+
+		if len(self.text) < 1800:
+			self.text = self.text+text
+		else:
+			await self.flush()
+			self.text = text
+
+	async def send_monospace(self, text):
+		if not self.monospace:
+			self.monospace = True
+			self.text = self.text+"```\n"
+
 		if len(self.text) < 1800:
 			self.text = self.text+text
 		else:
