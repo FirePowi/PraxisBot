@@ -399,6 +399,8 @@ class TriggerPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
+		self.ensure_regex(args.regex)
+
 		if len(lines) == 0:
 			await scope.shell.print_error(scope, "Missing script. Please write the script in the same message, just the line after the command.")
 			return

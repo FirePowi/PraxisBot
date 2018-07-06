@@ -81,6 +81,10 @@ class ObjectIdError(Error):
 		self.parameter = parameter
 		self.name = name
 
+class RegexError(Error):
+	def __init__(self, regex):
+		self.regex = regex
+
 ################################################################################
 # Decorators
 ################################################################################
@@ -420,6 +424,9 @@ class Shell:
 			scope.abort = True
 		except ObjectIdError as e:
 			await self.print_error(scope, e.parameter+" must be a number.");
+			scope.abort = True
+		except RegexError as e:
+			await self.print_error(scope, "`"+e.regex+"` is not a valid regular expression.");
 			scope.abort = True
 		except sqlite3.OperationalError as e:
 			print(traceback.format_exc())
@@ -779,6 +786,12 @@ class Plugin:
 	def ensure_object_id(self, parameter, name):
 		if not re.fullmatch('[0-9_]+', name):
 			raise ObjectIdError(parameter, name)
+
+	def ensure_regex(self, regex):
+		try:
+		    re.compile(regex)
+		except re.error:
+		    raise RegexError(regex)
 
 ################################################################################
 # MessageStream

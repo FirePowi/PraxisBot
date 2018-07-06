@@ -49,6 +49,7 @@ class PollPlugin(praxisbot.Plugin):
 		self.shell.create_sql_table("votes", ["id INTEGER PRIMARY KEY", "poll INTEGER", "discord_uid INTEGER", "choice INTEGER", "vote_time DATETIME"])
 
 		self.add_command("start_poll", self.execute_start_poll)
+		self.add_command("close_poll", self.execute_close_poll)
 		self.add_command("polls", self.execute_polls)
 
 	def check_emoji(self, reaction, emoji):
@@ -240,6 +241,30 @@ class PollPlugin(praxisbot.Plugin):
 
 		for c in choices:
 			scope.shell.add_sql_data("poll_choices", {"poll": poll_id, "emoji": c["emoji"], "description": c["description"]})
+
+	@praxisbot.command
+	async def execute_close_poll(self, scope, command, options, lines, **kwargs):
+		"""
+		Close a poll.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('poll', help='ID of the poll to close.')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		self.ensure_object_id("Poll ID", args.poll)
+
+		poll = scope.shell.get_sql_data("polls", ["id"], {"discord_sid":int(scope.server.id), "id":int(args.poll)})
+		if not poll:
+			await scope.shell.print_error(scope, "Poll #"+args.poll+"not found.")
+			return
+
+		end_time = datetime.datetime.now(timezone('UTC'))
+
+		scope.shell.update_sql_data("polls", {"end_time":end_time.strftime("%Y-%m-%d %H:%M:%S")}, {"discord_sid":int(scope.server.id), "id":int(args.poll)})
+		await scope.shell.print_success(scope, "Poll closed.")
 
 	@praxisbot.command
 	async def execute_polls(self, scope, command, options, lines, **kwargs):

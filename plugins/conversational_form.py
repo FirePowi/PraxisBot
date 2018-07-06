@@ -56,6 +56,8 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 
 		self.add_command("create_cf_node", self.execute_create_cf_node)
 		self.add_command("create_cf_link", self.execute_create_cf_link)
+		self.add_command("delete_cf_node", self.execute_delete_cf_node)
+		self.add_command("delete_cf_link", self.execute_delete_cf_link)
 		self.add_command("cf_nodes", self.execute_cf_nodes)
 		self.add_command("start_cf_session", self.execute_start_cf_session)
 		self.add_command("end_cf_session", self.execute_end_cf_session)
@@ -115,7 +117,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 	async def on_loop(self, scope):
 		sessions_to_delete = set()
 		for s in self.sessions:
-			timeout_time = self.sessions[s].last_time + datetime.deltatime(minutes=10)
+			timeout_time = self.sessions[s].last_time + datetime.timedelta(minutes=10)
 			if timeout_time < datetime.datetime.now():
 				sessions_to_delete.add(s)
 
@@ -206,10 +208,60 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Missing type of link. Please use --message option.")
 			return
 
+		self.ensure_regex(args.message)
+
 		if args.message:
 			scope.shell.set_sql_data("cf_links", {"script": "\n".join(lines), "type": LinkType.UserRegex, "value": args.message}, {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
 
 		await scope.shell.print_success(scope, "Link between `"+args.start+"` and `"+args.end+"` created.")
+
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_delete_cf_node(self, scope, command, options, lines, **kwargs):
+		"""
+		Delete a node.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('name', help='Text to send')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		self.ensure_object_name("Node name", args.name)
+
+		node = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.server.id), "name":str(args.name)})
+		if not node:
+			await scope.shell.print_error(scope, "Node `"+args.name+"` not found.")
+			return
+
+		scope.shell.delete_sql_data("cf_nodes", {"discord_sid":int(scope.server.id), "name":str(args.name)})
+		await scope.shell.print_success(scope, "Node `"+args.name+"` delete.")
+
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_delete_cf_link(self, scope, command, options, lines, **kwargs):
+		"""
+		Delete a link between to nodes.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('start', help='Name of the starting node')
+		parser.add_argument('end', help='Name of the final node')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+
+		self.ensure_object_name("Node name", args.start)
+		self.ensure_object_name("Node name", args.end)
+
+		link = scope.shell.get_sql_data("cf_links", ["id"], {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
+		if not link:
+			await scope.shell.print_error(scope, "Link `"+args.start+" → "+args.end+"` not found.")
+			return
+
+		scope.shell.delete_sql_data("cf_links", {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
+		await scope.shell.print_success(scope, "Link `"+args.start+" → "+args.end+"` delete.")
 
 	@praxisbot.command
 	@praxisbot.permission_admin
