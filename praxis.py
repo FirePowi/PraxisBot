@@ -36,6 +36,7 @@ from plugins.core import CorePlugin
 from plugins.trigger import TriggerPlugin
 from plugins.moderation import ModerationPlugin
 from plugins.board import BoardPlugin
+from plugins.activity import ActivityPlugin
 from plugins.archive import ArchivePlugin
 from plugins.rolelist import RoleListPlugin
 from plugins.poll import PollPlugin
@@ -95,6 +96,7 @@ class PraxisBot(discord.Client):
 		self.shell.load_plugin(TriggerPlugin)
 		self.shell.load_plugin(ModerationPlugin)
 		self.shell.load_plugin(BoardPlugin)
+		self.shell.load_plugin(ActivityPlugin)
 		self.shell.load_plugin(ArchivePlugin)
 		self.shell.load_plugin(RoleListPlugin)
 		self.shell.load_plugin(PollPlugin)

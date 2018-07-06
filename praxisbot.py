@@ -807,22 +807,22 @@ class MessageStream:
 			self.monospace = False
 			self.text = self.text+"\n```"
 
-		if len(self.text) < 1800:
+		if len(self.text)+len(text) < 1800:
 			self.text = self.text+text
 		else:
 			await self.flush()
-			self.text = text
+			self.text = self.text+text
 
 	async def send_monospace(self, text):
 		if not self.monospace:
 			self.monospace = True
 			self.text = self.text+"```\n"
 
-		if len(self.text) < 1800:
+		if len(self.text)+len(text) < 1800:
 			self.text = self.text+text
 		else:
 			await self.flush()
-			self.text = text
+			self.text = self.text+text
 
 	async def finish(self):
 		await self.flush()

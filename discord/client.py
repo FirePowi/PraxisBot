@@ -1444,7 +1444,7 @@ class Client:
         return self.connection._create_message(channel=channel, **data)
 
     @asyncio.coroutine
-    def count_messages(self, server, *, content=None, author=None, after=None):
+    def count_messages(self, server, *, content=None, author=None, after=None, before=None):
         """|coro|
 
         Count the number of messages that match the filter.
@@ -1459,6 +1459,8 @@ class Client:
             Count messages posted by this user.
         after: :class:`datetime`
             Count message posted after this date.
+        before: :class:`datetime`
+            Count message posted before this date.
 
         Returns
         --------
@@ -1480,6 +1482,8 @@ class Client:
             args["author_id"] = author.id
         if after:
             args["min_id"] = utils.time_snowflake(after, high=False)
+        if before:
+            args["max_id"] = utils.time_snowflake(before, high=False)
         data = yield from self.http.count_messages(server.id, **args)
         return int(data["total_results"])
 
