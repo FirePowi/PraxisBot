@@ -37,6 +37,7 @@ from plugins.trigger import TriggerPlugin
 from plugins.moderation import ModerationPlugin
 from plugins.board import BoardPlugin
 from plugins.archive import ArchivePlugin
+from plugins.rolelist import RoleListPlugin
 from plugins.poll import PollPlugin
 from plugins.conversational_form import ConversationalFormPlugin
 from plugins.emoji import EmojiPlugin
@@ -95,6 +96,7 @@ class PraxisBot(discord.Client):
 		self.shell.load_plugin(ModerationPlugin)
 		self.shell.load_plugin(BoardPlugin)
 		self.shell.load_plugin(ArchivePlugin)
+		self.shell.load_plugin(RoleListPlugin)
 		self.shell.load_plugin(PollPlugin)
 		self.shell.load_plugin(ConversationalFormPlugin)
 		self.shell.load_plugin(EmojiPlugin)
@@ -125,6 +127,7 @@ class PraxisBot(discord.Client):
 						try:
 							await p.on_loop(scope)
 						except:
+							print(traceback.format_exc())
 							pass
 
 	async def on_message(self, message):
