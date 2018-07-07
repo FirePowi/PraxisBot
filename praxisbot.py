@@ -81,6 +81,10 @@ class ObjectIdError(Error):
 		self.parameter = parameter
 		self.name = name
 
+class IntegerError(Error):
+	def __init__(self, name):
+		self.name = name
+
 class RegexError(Error):
 	def __init__(self, regex):
 		self.regex = regex
@@ -423,6 +427,9 @@ class Shell:
 			await self.print_error(scope, e.parameter+" must be a letter followed by alphanumeric characters.");
 			scope.abort = True
 		except ObjectIdError as e:
+			await self.print_error(scope, e.parameter+" must be a number.");
+			scope.abort = True
+		except IntegerError as e:
 			await self.print_error(scope, e.parameter+" must be a number.");
 			scope.abort = True
 		except RegexError as e:
@@ -786,6 +793,10 @@ class Plugin:
 	def ensure_object_id(self, parameter, name):
 		if not re.fullmatch('[0-9_]+', name):
 			raise ObjectIdError(parameter, name)
+
+	def ensure_integer(self, parameter, name):
+		if not re.fullmatch('[0-9_]+', name):
+			raise IntegerError(parameter)
 
 	def ensure_regex(self, regex):
 		try:

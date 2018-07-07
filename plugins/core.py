@@ -720,7 +720,7 @@ class CorePlugin(praxisbot.Plugin):
 	@praxisbot.command
 	async def execute_cite(self, scope, command, options, lines, **kwargs):
 		"""
-		Don't print any feedback during execution.
+		Cite a message.
 		"""
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)

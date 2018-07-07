@@ -31,6 +31,7 @@ import praxisbot
 class LinkType:
 	UserRegex=0
 	Timeout=1
+	Reaction=2
 
 class Session:
 	def __init__(self, node_start):
@@ -50,7 +51,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		super().__init__(shell)
 
 		self.shell.create_sql_table("cf_nodes", ["id INTEGER PRIMARY KEY", "name TEXT", "discord_sid INTEGER", "script TEXT"])
-		self.shell.create_sql_table("cf_links", ["id INTEGER PRIMARY KEY", "node_start TEXT", "node_end TEXT", "discord_sid INTEGER", "script TEXT", "type INTEGER", "value TEXT"])
+		self.shell.create_sql_table("cf_links", ["id INTEGER PRIMARY KEY", "node_start TEXT", "node_end TEXT", "discord_sid INTEGER", "script TEXT", "type INTEGER", "value TEXT", "priority INTEGER"])
 
 		self.sessions = {}
 
@@ -136,7 +137,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		node = session.current_node
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT node_end, script, type, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ?", [int(scope.server.id), str(node)]):
+			for row in c.execute("SELECT node_end, script, type, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? ORDER BY priority DESC, node_start", [int(scope.server.id), str(node)]):
 				if row[2] != LinkType.UserRegex:
 					continue
 
@@ -152,6 +153,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 
 				session.current_node = row[0]
 				await self.execute_session_node(scope.user, scope.channel, scope.server, scope)
+				return
 
 	@praxisbot.command
 	@praxisbot.permission_admin
@@ -180,19 +182,28 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 	@praxisbot.permission_admin
 	async def execute_create_cf_link(self, scope, command, options, lines, **kwargs):
 		"""
-		Create a link between to nodes.
+		Create a link between two nodes.
 		"""
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('start', help='Name of the starting node')
 		parser.add_argument('end', help='Name of the final node')
-		parser.add_argument('--message', help='Link activated if a message match a regular expression')
+		parser.add_argument('--message', help='Link activated if a message match a regular expression.')
+		parser.add_argument('--priority', help='Priority of the link')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
 
 		self.ensure_object_name("Node name", args.start)
 		self.ensure_object_name("Node name", args.end)
+
+		priority = 100
+		if args.priority:
+			try:
+				priority = int(args.priority)
+			except:
+				await scope.shell.print_error(scope, "Priority must be a positive integer.")
+				return
 
 		node_start = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.server.id), "name":str(args.start)})
 		if not node_start:
@@ -211,7 +222,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		self.ensure_regex(args.message)
 
 		if args.message:
-			scope.shell.set_sql_data("cf_links", {"script": "\n".join(lines), "type": LinkType.UserRegex, "value": args.message}, {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
+			scope.shell.set_sql_data("cf_links", {"script": "\n".join(lines), "type": LinkType.UserRegex, "value": args.message, "priority":int(priority)}, {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
 
 		await scope.shell.print_success(scope, "Link between `"+args.start+"` and `"+args.end+"` created.")
 
@@ -242,7 +253,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 	@praxisbot.permission_admin
 	async def execute_delete_cf_link(self, scope, command, options, lines, **kwargs):
 		"""
-		Delete a link between to nodes.
+		Delete a link between two nodes.
 		"""
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
@@ -284,19 +295,20 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 			await stream.send("__**List of nodes**__")
 			for row in c0.execute("SELECT name, script FROM "+scope.shell.dbtable("cf_nodes")+" WHERE discord_sid = ? ORDER BY name", [int(scope.server.id)]):
 				await stream.send("\n\n:triangular_flag_on_post: **"+row[0]+"**")
-				for link in c1.execute("SELECT node_start, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND node_end == node_start ORDER BY node_start", [int(scope.server.id), str(row[0])]):
+				for link in c1.execute("SELECT node_start, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND node_end == node_start ORDER BY node_start, priority DESC", [int(scope.server.id), str(row[0])]):
 					await stream.send("\n - Self link: **"+str(row[0])+"** → **"+str(row[0])+"**")
-				for link in c1.execute("SELECT node_start, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_end = ? AND node_end != node_start ORDER BY node_start", [int(scope.server.id), str(row[0])]):
+				for link in c1.execute("SELECT node_start, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_end = ? AND node_end != node_start ORDER BY node_start, priority DESC", [int(scope.server.id), str(row[0])]):
 					await stream.send("\n - Incoming link: "+link[0]+" → **"+str(row[0])+"**")
-				for link in c1.execute("SELECT node_end, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND node_end != node_start ORDER BY node_end", [int(scope.server.id), str(row[0])]):
+				for link in c1.execute("SELECT node_end, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND node_end != node_start ORDER BY node_end, priority DESC", [int(scope.server.id), str(row[0])]):
 					await stream.send("\n - Outcoming link: **"+str(row[0])+"** → "+link[0])
 				if len(row[1]) > 0:
 					await stream.send("\n - Script:")
 					await stream.send("\n```\n"+row[1]+"\n```")
 
 			await stream.send("\n\n__**List of links**__")
-			for row in c0.execute("SELECT node_start, node_end, script, type, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? ORDER BY node_start, node_end", [int(scope.server.id)]):
+			for row in c0.execute("SELECT node_start, node_end, script, type, value, priority FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? ORDER BY node_start, node_end", [int(scope.server.id)]):
 				await stream.send("\n\n:link: **"+row[0]+" → "+row[1]+"**")
+				await stream.send("\n - Priority: "+str(row[5]))
 				if row[3] == LinkType.UserRegex:
 					await stream.send("\n - Condition: user message match `"+row[4]+"`")
 				elif row[3] == LinkType.Timeout:
