@@ -30,6 +30,8 @@ from sympy import sympify
 from sympy.parsing.sympy_parser import parse_expr
 from sympy.printing.str import sstrrepr
 
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import interpolate, signal
@@ -404,6 +406,8 @@ $
 		parser.add_argument('--ylabel', help='Y axis label')
 		parser.add_argument('--bluecurve', nargs='+', help='Plot a blue curve', metavar='VALUE')
 		parser.add_argument('--redcurve', nargs='+', help='Plot a blue curve', metavar='VALUE')
+		parser.add_argument('--orangecurve', nargs='+', help='Plot a blue curve', metavar='VALUE')
+		parser.add_argument('--greencurve', nargs='+', help='Plot a blue curve', metavar='VALUE')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -441,6 +445,24 @@ $
 						curves["blue"]["data"].append(y)
 					except:
 						curves["blue"]["title"]=e
+
+			if args.orangecurve:
+				curves["orange"] = {"data":[], "title":None}
+				for e in args.orangecurve:
+					try:
+						y = float(e)
+						curves["orange"]["data"].append(y)
+					except:
+						curves["orange"]["title"]=e
+
+			if args.greencurve:
+				curves["green"] = {"data":[], "title":None}
+				for e in args.greencurve:
+					try:
+						y = float(e)
+						curves["green"]["data"].append(y)
+					except:
+						curves["green"]["title"]=e
 
 			for c in curves:
 				size = len(curves[c]["data"])
