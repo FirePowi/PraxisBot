@@ -306,7 +306,7 @@ class ExecutionScope:
 			elif tag in self.vars:
 				tagOutput = self.vars[tag]
 			else:
-				tagOutput = ""
+				tagOutput = tag
 			formatedText = formatedText + str(tagOutput)
 
 		formatedText = formatedText + text[textIter:]

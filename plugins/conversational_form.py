@@ -26,6 +26,7 @@ import traceback
 import io
 import datetime
 from pytz import timezone
+from dateutil.relativedelta import relativedelta
 import praxisbot
 
 class LinkType:
@@ -34,9 +35,10 @@ class LinkType:
 	Reaction=2
 
 class Session:
-	def __init__(self, node_start):
+	def __init__(self, node_start, timeout):
 		self.vars = {}
 		self.current_node = node_start
+		self.timeout_duration = timeout
 		self.start_time = datetime.datetime.now()
 		self.last_time = self.start_time
 
@@ -64,9 +66,9 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		self.add_command("end_cf_session", self.execute_end_cf_session)
 		self.add_command("cf_sessions", self.execute_cf_sessions)
 
-	def start_session(self, user, channel, server, node_start):
+	def start_session(self, user, channel, server, node_start, timeout):
 		key = (user.id, channel.id, server.id)
-		self.sessions[key] = Session(node_start)
+		self.sessions[key] = Session(node_start, timeout)
 
 	def end_session(self, user, channel, server):
 		key = (user.id, channel.id, server.id)
@@ -118,7 +120,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 	async def on_loop(self, scope):
 		sessions_to_delete = set()
 		for s in self.sessions:
-			timeout_time = self.sessions[s].last_time + datetime.timedelta(minutes=10)
+			timeout_time = self.sessions[s].last_time + self.sessions[s].timeout_duration
 			if timeout_time < datetime.datetime.now():
 				sessions_to_delete.add(s)
 
@@ -328,6 +330,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('node', help='Name of the starting node')
+		parser.add_argument('--timeout', help='Timeout after no response from users.')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -338,7 +341,21 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Node `"+args.node+"` not found.")
 			return
 
-		self.start_session(scope.user, scope.channel, scope.server, args.node)
+		timeout = relativedelta(minutes=15)
+		if args.timeout:
+			r = re.match("([0-9]+)-([0-9]+)-([0-9]+) ([0-9]+):([0-9]+):([0-9]+)", scope.format_text(args.timeout))
+			if r:
+				years = int(r.group(1))
+				months = int(r.group(2))
+				days = int(r.group(3))
+				hours = int(r.group(4))
+				minutes = int(r.group(5))
+				seconds = int(r.group(6))
+				timeout = relativedelta(years=years, months=months, days=days, hours=hours, minutes=minutes, seconds=seconds)
+			else:
+				await scope.shell.print_error("Timeout must be in the format `Y-M-D H:M:S`")
+
+		self.start_session(scope.user, scope.channel, scope.server, args.node, timeout)
 		await self.execute_session_node(scope.user, scope.channel, scope.server, scope)
 
 	@praxisbot.command

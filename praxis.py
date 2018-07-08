@@ -43,6 +43,7 @@ from plugins.poll import PollPlugin
 from plugins.conversational_form import ConversationalFormPlugin
 from plugins.emoji import EmojiPlugin
 from plugins.http import HTTPPlugin
+from plugins.math import MathPlugin
 
 ########################################################################
 # Init
@@ -103,6 +104,7 @@ class PraxisBot(discord.Client):
 		self.shell.load_plugin(ConversationalFormPlugin)
 		self.shell.load_plugin(EmojiPlugin)
 		self.shell.load_plugin(HTTPPlugin)
+		self.shell.load_plugin(MathPlugin)
 
 	async def on_ready(self):
 		print("Bot logged on as {0}".format(self.user))
