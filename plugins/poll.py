@@ -63,35 +63,31 @@ class PollPlugin(praxisbot.Plugin):
 			for poll in c0.execute("SELECT id, discord_cid, discord_mid, description, end_time as 'end_time_ [timestamp]', type FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ?", [int(scope.server.id)]):
 				try:
 					chan = scope.shell.find_channel(str(poll[1]), scope.server)
-					if not chan:
-						continue
-
 					msg = None
-					try:
-						msg = await scope.shell.client.get_message(chan, str(poll[2]))
-					except:
-						pass
-					if not msg:
-						continue
+					if chan:
+						try:
+							msg = await scope.shell.client.get_message(chan, str(poll[2]))
+						except:
+							pass
 
 					end_time = timezone('UTC').localize(poll[4])
 					end_time_readable = end_time.astimezone(timezone('Europe/Paris'))
 					current_time = datetime.datetime.now(timezone('UTC'))
 					if end_time < current_time:
+						if msg:
+							text = poll[3]+"\n\n**Results:**"
+							for choice in c1.execute("SELECT id, emoji FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [poll[0]]):
+								counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0], "choice": choice[0]})
+								text = text+"\n\n"+choice[1]+" : "+str(counter[0])
 
-						text = poll[3]+"\n\n**Results:**"
-						for choice in c1.execute("SELECT id, emoji FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [poll[0]]):
-							counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0], "choice": choice[0]})
-							text = text+"\n\n"+choice[1]+" : "+str(counter[0])
-
-						await scope.shell.client.edit_message(msg, text)
-						await scope.shell.client.clear_reactions(msg)
+							await scope.shell.client.edit_message(msg, text)
+							await scope.shell.client.clear_reactions(msg)
 
 						scope.shell.delete_sql_data("votes", {"poll": poll[0]})
 						scope.shell.delete_sql_data("poll_choices", {"poll": poll[0]})
 						scope.shell.delete_sql_data("polls", {"id": poll[0]})
 
-					else:
+					elif msg:
 						changes = False
 						choices = {}
 						reaction_already_added = []
@@ -285,15 +281,16 @@ class PollPlugin(praxisbot.Plugin):
 			c1 = scope.shell.dbcon.cursor()
 			for row in c0.execute("SELECT id, description, discord_cid, end_time as 'end_time_ [timestamp]' FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ? ORDER BY end_time", [int(scope.server.id)]):
 				chan = scope.shell.find_channel(str(row[2]), scope.server)
-				if not chan:
-					continue
+				chan_name = "an unknown channel"
+				if chan:
+					chan_name = chan.mention
 
 				end_time = timezone('UTC').localize(row[3])
 				end_time = end_time.astimezone(timezone('Europe/Paris'))
 
 				counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": row[0]})
 
-				await stream.send("\n\n:bar_chart: **Poll #"+str(row[0])+" in "+chan.mention+"**")
+				await stream.send("\n\n:bar_chart: **Poll #"+str(row[0])+" in "+chan_name+"**")
 				await stream.send("\n - Closing time: "+end_time.strftime("%Y-%m-%d %H:%M:%S"))
 				choices = []
 				for choice in c1.execute("SELECT emoji, description FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [row[0]]):

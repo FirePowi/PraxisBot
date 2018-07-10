@@ -266,7 +266,6 @@ class MathPlugin(praxisbot.Plugin):
 
 		self.add_command("latex", self.execute_latex)
 		self.add_command("math", self.execute_math)
-		self.add_command("chemfig", self.execute_chemfig)
 		self.add_command("xkcd_plot", self.execute_xkcd_plot)
 
 	def latex_to_png(self, latex_code, stream):
@@ -362,39 +361,6 @@ $
 			return
 
 	@praxisbot.command
-	async def execute_chemfig(self, scope, command, options, lines, **kwargs):
-		"""
-		Generate chimical figure.
-		"""
-
-		latex_begin = r"""
-\documentclass[preview, border=4pt]{standalone}
-\usepackage{amsmath}
-\usepackage{amsfonts}
-\usepackage{chemfig}
-\begin{document}
-$\displaystyle
-"""
-
-		latex_end = r"""
-$
-\end{document}
-"""
-
-		latex_code = latex_begin+"\\chemfig{"+options+"}"+latex_end
-
-		stream = BytesIO()
-		try:
-			self.latex_to_png(latex_code, stream)
-			stream.seek(0)
-			await scope.shell.client.send_file(scope.channel, stream, filename="figchem.png")
-			stream.close()
-		except:
-			print(traceback.format_exc())
-			await scope.shell.print_error(scope, "Invalid latex expression")
-			return
-
-	@praxisbot.command
 	async def execute_xkcd_plot(self, scope, command, options, lines, **kwargs):
 		"""
 		Plot curves with xkcd style.
@@ -405,9 +371,9 @@ $
 		parser.add_argument('--xlabel', help='X axis label')
 		parser.add_argument('--ylabel', help='Y axis label')
 		parser.add_argument('--bluecurve', nargs='+', help='Plot a blue curve', metavar='VALUE')
-		parser.add_argument('--redcurve', nargs='+', help='Plot a blue curve', metavar='VALUE')
-		parser.add_argument('--orangecurve', nargs='+', help='Plot a blue curve', metavar='VALUE')
-		parser.add_argument('--greencurve', nargs='+', help='Plot a blue curve', metavar='VALUE')
+		parser.add_argument('--redcurve', nargs='+', help='Plot a red curve', metavar='VALUE')
+		parser.add_argument('--orangecurve', nargs='+', help='Plot a orange curve', metavar='VALUE')
+		parser.add_argument('--greencurve', nargs='+', help='Plot a green curve', metavar='VALUE')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -481,8 +447,7 @@ $
 
 			XKCDify(ax)
 
-			my_dpi = 72
-			plt.savefig(stream, figsize=(800/my_dpi, 600/my_dpi), dpi=my_dpi)
+			plt.savefig(stream)
 			plt.close()
 
 			stream.seek(0)
