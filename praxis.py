@@ -136,6 +136,25 @@ class PraxisBot(discord.Client):
 							print(traceback.format_exc())
 							pass
 
+	async def on_reaction_add(self, reaction, user):
+		if reaction.message.channel.is_private:
+			return
+		if user.__class__ != discord.Member:
+			return
+		if user.bot:
+			return
+
+		scope = self.shell.create_scope(reaction.message.server, [""])
+		scope.channel = reaction.message.channel
+		scope.user = user
+		scope.permission = praxisbot.UserPermission.Script
+
+		for p in self.shell.plugins:
+			try:
+				await p.on_reaction(scope, reaction)
+			except:
+				pass
+
 	async def on_message(self, message):
 		if message.channel.is_private:
 			return

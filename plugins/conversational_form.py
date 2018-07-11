@@ -100,6 +100,9 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 
 		await scope.shell.execute_script(subScope, script)
 
+		if key not in self.sessions:
+			return
+
 		for v in subScope.session_vars:
 			self.sessions[key].vars[v] = subScope.session_vars[v]
 		self.sessions[key].last_time = datetime.datetime.now()
@@ -139,12 +142,9 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		node = session.current_node
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT node_end, script, type, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? ORDER BY priority DESC, node_start", [int(scope.server.id), str(node)]):
-				if row[2] != LinkType.UserRegex:
-					continue
-
+			for row in c.execute("SELECT node_end, script, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND type = ? ORDER BY priority DESC, node_start", [int(scope.server.id), str(node), int(LinkType.UserRegex)]):
 				try:
-					if not re.search(row[3], message.content):
+					if not re.search(row[2], message.content):
 						continue
 				except:
 					continue
@@ -156,6 +156,25 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 				session.current_node = row[0]
 				await self.execute_session_node(scope.user, scope.channel, scope.server, scope)
 				return
+
+	def check_emoji(self, reaction, emoji):
+		e = str(reaction.emoji)
+		return e.startswith(emoji)
+
+	async def on_reaction(self, scope, reaction):
+		session = self.get_session(scope.user, scope.channel, scope.server)
+		if not session:
+			return
+		node = session.current_node
+		with scope.shell.dbcon:
+			c = scope.shell.dbcon.cursor()
+			for row in c.execute("SELECT node_end, script, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND type = ? ORDER BY priority DESC, node_start", [int(scope.server.id), str(node), int(LinkType.Reaction)]):
+				if self.check_emoji(reaction, row[2]):
+					await self.execute_session_script(scope.user, scope.channel, scope.server, scope, row[1])
+
+					session.current_node = row[0]
+					await self.execute_session_node(scope.user, scope.channel, scope.server, scope)
+					return
 
 	@praxisbot.command
 	@praxisbot.permission_admin
@@ -191,6 +210,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		parser.add_argument('start', help='Name of the starting node')
 		parser.add_argument('end', help='Name of the final node')
 		parser.add_argument('--message', help='Link activated if a message match a regular expression.')
+		parser.add_argument('--reaction', help='Link activated if a reaction is added in this channel.')
 		parser.add_argument('--priority', help='Priority of the link')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
@@ -217,14 +237,14 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Node `"+args.end+"` not found.")
 			return
 
-		if not args.message:
+		if args.message:
+			self.ensure_regex(args.message)
+			scope.shell.set_sql_data("cf_links", {"script": "\n".join(lines), "type": LinkType.UserRegex, "value": args.message, "priority":int(priority)}, {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
+		elif args.reaction:
+			scope.shell.set_sql_data("cf_links", {"script": "\n".join(lines), "type": LinkType.Reaction, "value": args.reaction, "priority":int(priority)}, {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
+		else:
 			await scope.shell.print_error(scope, "Missing type of link. Please use --message option.")
 			return
-
-		self.ensure_regex(args.message)
-
-		if args.message:
-			scope.shell.set_sql_data("cf_links", {"script": "\n".join(lines), "type": LinkType.UserRegex, "value": args.message, "priority":int(priority)}, {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
 
 		await scope.shell.print_success(scope, "Link between `"+args.start+"` and `"+args.end+"` created.")
 
@@ -315,6 +335,8 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 					await stream.send("\n - Condition: user message match `"+row[4]+"`")
 				elif row[3] == LinkType.Timeout:
 					await stream.send("\n - Condition: timeout of "+row[4]+"")
+				elif row[3] == LinkType.Reaction:
+					await stream.send("\n - Condition: reaction added "+row[4]+"")
 				if len(row[2]) > 0:
 					await stream.send("\n - Script:")
 					await stream.send("\n```\n"+row[2]+"\n```")

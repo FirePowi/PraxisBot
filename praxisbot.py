@@ -760,6 +760,9 @@ class Plugin:
 	async def on_message(self, scope, message, command_found):
 		return False
 
+	async def on_reaction(self, scope, reaction):
+		return False
+
 	def add_command(self, name, cmd):
 		self.cmds[name] = cmd
 

@@ -420,6 +420,7 @@ class CorePlugin(praxisbot.Plugin):
 		parser.add_argument('--authorimage', help='Embed author image')
 		parser.add_argument('--authorurl', help='Embed author URL')
 		parser.add_argument('--fields', nargs="+", help='List of key/value')
+		parser.add_argument('--reactions', nargs='+', help='Name of a variable containing a set', metavar='EMOJI')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -486,7 +487,13 @@ class CorePlugin(praxisbot.Plugin):
 						field_key = None
 
 		if e or len(formatedText) > 0:
-			await scope.shell.send_message(subScope.channel, formatedText, e)
+			msg = await scope.shell.send_message(subScope.channel, formatedText, e)
+			if args.reactions:
+				for emoji in args.reactions:
+					try:
+						await scope.shell.client.add_reaction(msg, emoji)
+					except:
+						pass
 
 	@praxisbot.command
 	@praxisbot.permission_script
