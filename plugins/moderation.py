@@ -513,15 +513,38 @@ class ModerationPlugin(praxisbot.Plugin):
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('num', help='Number of messages to purge.')
-		parser.add_argument('--all', action='store_true' , help='Remove all messages, including pinned messages.')
+		parser.add_argument('--all', action='store_true', help='Remove all messages, including pinned messages.')
+		parser.add_argument('--before', help='Remove only messages before a specific message.')
+		parser.add_argument('--after', help='Remove only messages after a specific message.')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
 
+		self.ensure_integer("Number of messages", args.num)
 		n = int(args.num)
 		if n < 1:
 			await scope.shell.print_error(scope, "Invalid number of messages.")
 			return
+
+		after=None
+		if args.after:
+			try:
+				after = await scope.shell.client.get_message(scope.channel, args.after)
+			except:
+				after = None
+			if not after:
+				await scope.shell.print_error(scope, "Message not found.")
+				return
+
+		before=None
+		if args.before:
+			try:
+				before = await scope.shell.client.get_message(scope.channel, args.before)
+			except:
+				before = None
+			if not before:
+				await scope.shell.print_error(scope, "Message not found.")
+				return
 
 		def check_function(m):
 			if not args.all:
@@ -529,4 +552,4 @@ class ModerationPlugin(praxisbot.Plugin):
 			else:
 				return True
 
-		await scope.shell.client.purge_from(scope.channel, limit=n, check=check_function)
+		await scope.shell.client.purge_from(scope.channel, limit=n, check=check_function, after=after, before=before)
