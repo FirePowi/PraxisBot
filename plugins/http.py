@@ -41,10 +41,10 @@ class HTTPPlugin(praxisbot.Plugin):
 		self.shell.create_sql_table("cookies", ["id INTEGER PRIMARY KEY", "nameid TEXT", "discord_sid INTEGER", "name TEXT", "content TEXT", "filter TEXT"])
 
 		self.add_command("if_http", self.execute_if_http)
-		self.add_command("parse_http", self.execute_parse_http)
 		self.add_command("create_cookie", self.execute_create_cookie)
 		self.add_command("cookies", self.execute_cookies)
 		self.add_command("download", self.execute_download)
+		self.add_command("upload", self.execute_upload)
 
 	@praxisbot.command
 	async def execute_create_cookie(self, scope, command, options, lines, **kwargs):
@@ -134,7 +134,8 @@ class HTTPPlugin(praxisbot.Plugin):
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('url', help='URL to download')
-		parser.add_argument('filename', help='Filename sent in Discord')
+		parser.add_argument('--filename', help='Filename sent in Discord')
+		parser.add_argument('--var', help='Variable that will contains the file')
 		parser.add_argument('--cookie', help='Name of a cookie to send with the request.')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
@@ -166,67 +167,29 @@ class HTTPPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "The page `"+url+"` can't be loaded.")
 			return
 
-		f = io.BytesIO(result.content)
-		await scope.shell.client.send_file(scope.channel, f, filename=args.filename)
-		f.close()
+		if args.filename:
+			f = io.BytesIO(result.content)
+			await scope.shell.client.send_file(scope.channel, f, filename=args.filename)
+			f.close()
+		elif args.var:
+			scope.vars[args.var] = result.text
+		else:
+			scope.vars["result"] = result.text
+
 
 	@praxisbot.command
-	@praxisbot.permission_script
-	async def execute_parse_http(self, scope, command, options, lines, **kwargs):
+	async def execute_upload(self, scope, command, options, lines, **kwargs):
 		"""
-		Download and parse using REGEX from an URL.
+		Upload files on Discord.
 		"""
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
-		parser.add_argument('url', help='URL to download')
-		parser.add_argument('regex', help='Regular expression to apply on the downloaded file.')
-		parser.add_argument('--output', help='Format of the output. Use {{result}}, {{result0}}, {{result1}}, ....', default="{{result}}")
-		parser.add_argument('--cookie', help='Name of a cookie to send with the request.')
+		parser.add_argument('data', help='Data that will be contains in the file')
+		parser.add_argument('filename', help='Name of the file that will be uploaded')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
 
-		url = scope.format_text(args.url)
-		result = None
-		cookies = {}
-		if args.cookie:
-			cookieData = scope.shell.get_sql_data("cookies", ["name", "content", "filter"], {"discord_sid": int(scope.server.id), "nameid": str(args.cookie)})
-			if not cookieData:
-				await scope.shell.print_error(scope, "Cookie `"+args.cookie+"` not found.")
-				return
-			if not re.fullmatch(cookieData[2], url):
-				await scope.shell.print_error(scope, "This cookie can't be used with this URL.")
-				return
-
-			cookies[cookieData[0]] = cookieData[1]
-
-		try:
-			result = requests.get(url, allow_redirects=True, cookies=cookies)
-			if not result.ok:
-				result = None
-
-		except:
-			result = None
-
-		if not result:
-			await scope.shell.print_error(scope, "The page `"+url+"` can't be loaded.")
-			return
-
-		res = None
-		try:
-			res = re.search(args.regex, result.text)
-		except:
-			await scope.shell.print_error(scope, "The regular expression seems wrong.")
-			return
-
-		if res:
-			scope.vars["result"] = res.group(0)
-			counter = 0
-			for g in res.groups():
-				scope.vars["result"+str(counter)] = g
-				counter = counter+1
-			if args.output and len(args.output)>0:
-				await scope.shell.print_info(scope, scope.format_text(args.output))
-		else:
-			await scope.shell.print_error(scope, "The regular expression didn't match anything.")
-			return
+		f = io.BytesIO(scope.format_text(args.data).encode('UTF-8'))
+		await scope.shell.client.send_file(scope.channel, f, filename=args.filename)
+		f.close()

@@ -565,6 +565,7 @@ class CorePlugin(praxisbot.Plugin):
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
 		parser.add_argument('regex', help='Regular expression')
 		parser.add_argument('data', help='Target string')
+		parser.add_argument('--var', help='Variable that will contains the result')
 		parser.add_argument('--output', help='Format of the output. Use {{result}}, {{result0}}, {{result1}}, ....', default="{{result}}")
 		args = await self.parse_options(scope, parser, options)
 		if not args:
@@ -579,10 +580,13 @@ class CorePlugin(praxisbot.Plugin):
 			return
 
 		if res:
-			scope.vars["result"] = res.group(0)
+			varName = "result"
+			if args.var:
+				varName = args.var
+			scope.vars[varName] = res.group(0)
 			counter = 0
 			for g in res.groups():
-				scope.vars["result"+str(counter)] = g
+				scope.vars[varName+str(counter)] = g
 				counter = counter+1
 			if args.output and len(args.output)>0:
 				await scope.shell.print_info(scope, scope.format_text(args.output))
@@ -731,22 +735,43 @@ class CorePlugin(praxisbot.Plugin):
 		"""
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
-		parser.add_argument('messageid', help='Message ID to cite')
+		parser.add_argument('messageid', help='Message ID or URL to cite')
 		parser.add_argument('--channel', help='Channel where the cited message is')
+		parser.add_argument('--server', help='Server where the cited message is')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
 
+		urlParser = re.match("https\:\/\/discordapp.com\/channels\/([0-9]+)\/([0-9]+)\/([0-9]+)", args.messageid)
+		if urlParser:
+			args.server = urlParser.group(1)
+			args.channel = urlParser.group(2)
+			args.messageid = urlParser.group(3)
+
+		if args.server:
+			server = scope.shell.find_server(scope.format_text(args.server).strip())
+		else:
+			server = scope.server
+
+		if not server:
+			await scope.shell.print_error(scope, "Unknown server `"+args.server+"`.")
+			return
+
 		if args.channel:
-			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.server)
+			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), server)
 		else:
 			chan = scope.channel
 
 		if not chan:
-			await scope.shell.print_error(scope, "Unknown channel.")
+			await scope.shell.print_error(scope, "Unknown channel `"+args.channel+"`.")
 			return
 
-		if not chan.permissions_for(scope.user).read_messages:
+		member = scope.shell.find_member(scope.user.id, server)
+		if not member:
+			await scope.shell.print_error(scope, "Your are not a member of the server.")
+			return
+
+		if not chan.permissions_for(member).read_messages:
 			await scope.shell.print_permission(scope, "You don't have read permission in this channel.")
 			return
 
@@ -757,7 +782,7 @@ class CorePlugin(praxisbot.Plugin):
 			msg = None
 
 		if not msg:
-			await scope.shell.print_error(scope, "Message not found `"+args.messageid+"`.")
+			await scope.shell.print_error(scope, "Message not found `"+args.messageid+"` in channel "+chan.mention+".")
 			return
 
 		msg_deltatime = datetime.datetime.utcnow() - msg.timestamp
@@ -783,7 +808,10 @@ class CorePlugin(praxisbot.Plugin):
 
 		e = discord.Embed();
 		e.type = "rich"
-		e.set_author(name=msg.author.display_name+duration+" in #"+chan.name, icon_url=msg.author.avatar_url.replace(".webp", ".png"))
+		chan_name = "#"+chan.name
+		if server.id != scope.server.id:
+			chan_name = chan_name+" ("+server.name+")"
+		e.set_author(name=msg.author.display_name+duration+" in "+chan_name, icon_url=msg.author.avatar_url.replace(".webp", ".png"))
 		e.description = msg.content
 		e.set_footer(text="Cited by "+scope.user.display_name)
 
