@@ -234,29 +234,43 @@ class PraxisBot(discord.Client):
 		ban_author = ""
 		ban_target = ""
 		ban_reason = ""
+		ban_found_in_logs = False
 
-		bans = await self.shell.client.get_ban_logs(member.server, limit=5)
-		for b in bans:
-			if b.target.id == member.id:
-				author = b.author
-				reason = b.reason
+		try:
+			startTime = time.time()
+			while not ban_found_in_logs:
+				currTime = time.time()
+				duration = (currTime - startTime)
+				if duration > 60:
+					break
 
-				if b.author.id == self.shell.client.user.id:
-					#Try to find the true author in the reason
-					res = re.search("(.+#[0-9][0-9][0-9][0-9]) using ban command", b.reason)
-					if res:
-						u = self.shell.find_member(res.group(1), member.server)
-						if u:
-							author = u
+				bans = await self.shell.client.get_ban_logs(member.server, limit=10)
 
-					res = re.search("using ban command:(.+)", b.reason)
-					if res:
-						reason = res.group(1).strip()
+				for b in bans:
+					if b.target.id == member.id:
+						author = b.author
+						reason = b.reason
 
-				ban_author = author.name+"#"+author.discriminator
-				ban_reason = reason
-				ban_target = b.target.name+"#"+b.target.discriminator
-				break
+						if b.author.id == self.shell.client.user.id:
+							#Try to find the true author in the reason
+							res = re.search("(.+#[0-9][0-9][0-9][0-9]) using ban command", b.reason)
+							if res:
+								u = self.shell.find_member(res.group(1), member.server)
+								if u:
+									author = u
+
+							res = re.search("using ban command:(.+)", b.reason)
+							if res:
+								reason = res.group(1).strip()
+
+						ban_author = author.name+"#"+author.discriminator
+						ban_reason = reason
+						ban_target = b.target.name+"#"+b.target.discriminator
+						ban_found_in_logs = True
+						break
+		except:
+			print(traceback.format_exc())
+			pass
 
 		try:
 			scope = self.shell.create_scope(member.server, [""])

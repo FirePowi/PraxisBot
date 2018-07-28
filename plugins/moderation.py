@@ -380,13 +380,16 @@ class ModerationPlugin(praxisbot.Plugin):
 			else:
 				await scope.shell.client.kick(u)
 		except:
-			await scope.shell.print_error(scope, "You can't ban "+u.display_name+" (please check that PraxisBot role is high enough).")
+			await scope.shell.print_error(scope, "You can't "+action_name+" "+u.display_name+" (please check that PraxisBot role is high enough).")
 			return
 
 		last_time = datetime.datetime.now(timezone('UTC'))
 
 		scope.shell.set_sql_data("ban_time", {"last_time": str(last_time)}, {"discord_sid": int(scope.server.id), "discord_uid": int(scope.user.id)})
-		await scope.shell.print_success(scope, ""+u.display_name+" banned.")
+		if action_name == "ban":
+			await scope.shell.print_success(scope, ""+u.display_name+" banned.")
+		else:
+			await scope.shell.print_success(scope, ""+u.display_name+" kicked.")
 		scope.deletecmd = True
 
 	@praxisbot.command
@@ -516,6 +519,7 @@ class ModerationPlugin(praxisbot.Plugin):
 		parser.add_argument('--all', action='store_true', help='Remove all messages, including pinned messages.')
 		parser.add_argument('--before', help='Remove only messages before a specific message.')
 		parser.add_argument('--after', help='Remove only messages after a specific message.')
+		parser.add_argument('--onebyone', action='store_true', help='Remove messages one by one. Useful to bypass Discord limitations.')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -552,4 +556,25 @@ class ModerationPlugin(praxisbot.Plugin):
 			else:
 				return True
 
-		await scope.shell.client.purge_from(scope.channel, limit=n, check=check_function, after=after, before=before)
+		if args.onebyone:
+			message_left = n
+			newmessages = True
+			curr_before = before
+			curr_after = after
+			while message_left > 0 and newmessages:
+				newmessages = False
+				b = before
+				async for m in scope.shell.client.logs_from(scope.channel, limit=min(200, message_left), before=curr_before, after=curr_after):
+					message_left = message_left-1
+					if args.after:
+						curr_after = m
+					else:
+						curr_before = m
+					newmessages = True
+					if check_function(m):
+						await self.shell.client.delete_message(m)
+		else:
+			try:
+				await scope.shell.client.purge_from(scope.channel, limit=n, check=check_function, after=after, before=before)
+			except:
+				await scope.shell.print_error(scope, "Purge failed. Please retry with the option --onebyone.")
