@@ -324,10 +324,10 @@ class UserPermission:
 	Owner=3
 
 class Shell:
-	def __init__(self, client, client_humans, dbprefix, dbcon):
+	def __init__(self, client, client_human, dbprefix, dbcon):
 		self.plugins = []
 		self.client = client
-		self.client_humans = client_humans
+		self.client_human = client_human
 		self.dbprefix = dbprefix
 		self.dbcon = dbcon
 
