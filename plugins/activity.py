@@ -64,8 +64,12 @@ class ActivityPlugin(praxisbot.Plugin):
 
 			text = text+" "
 
-			nb_box = int(20.0*counter["counter"]/counter_max)
-			nb_empty = 20-nb_box
+			if counter_max > 0:
+				nb_box = int(20.0*counter["counter"]/counter_max)
+				nb_empty = 20-nb_box
+			else:
+				nb_box = 0
+				nb_empty = 20
 
 			for i in range(0, nb_box):
 				text = text+"█"
