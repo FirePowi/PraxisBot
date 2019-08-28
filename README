@@ -1,0 +1,12 @@
+# install
+
+## install dependancies (`apt install` or `pip install`)
+
+
+    apt install sqlite3 python3-websockets python3-aiohttp python3-tz \
+        python3-dateutil python3-sympy python3-matplotlib python3-scipy
+
+## init bot (db creation)
+ 
+
+
