@@ -85,7 +85,7 @@ class ArchivePlugin(praxisbot.Plugin):
 			chan = scope.channel
 
 		if not chan:
-			await scope.shell.print_error(scope, "Unknown channel.")
+			await scope.shell.print_error(scope, "Unknown channel. {}".format(args.channel))
 			return
 
 		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).read_messages:
@@ -130,7 +130,7 @@ class ArchivePlugin(praxisbot.Plugin):
 			chan = scope.channel
 
 		if not chan:
-			await scope.shell.print_error(scope, "Unknown channel.")
+			await scope.shell.print_error(scope, "Unknown channel. {}".format(args.channel))
 			return
 
 		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).read_messages:
@@ -178,7 +178,7 @@ class ArchivePlugin(praxisbot.Plugin):
 			chan = scope.channel
 
 		if not chan:
-			await scope.shell.print_error(scope, "Unknown channel.")
+			await scope.shell.print_error(scope, "Unknown channel. {}".format(args.channel))
 			return
 
 		if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).read_messages:

@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/python3
 
 """
 
@@ -163,7 +163,7 @@ class PraxisBot(discord.Client):
 		if message.author.bot:
 			return
 
-		prefixes = [self.user.mention+" "]
+		prefixes = ["-"]
 
 		customCommandPrefix = self.shell.get_sql_data("servers", ["command_prefix"], {"discord_sid": int(message.server.id)})
 		if customCommandPrefix:
@@ -172,9 +172,9 @@ class PraxisBot(discord.Client):
 		scope = self.shell.create_scope(message.server, prefixes)
 		scope.channel = message.channel
 		scope.user = message.author
-		if message.author.id == message.server.owner.id:
+		if message.author.id == message.server.owner.id or message.author == discord.AppInfo.owner:
 			scope.permission = praxisbot.UserPermission.Owner
-		elif message.author.server_permissions.administrator:
+		elif message.author.server_permissions.administrator or message:
 			scope.permission = praxisbot.UserPermission.Admin
 
 		command_found = await self.shell.execute_command(scope, message.content)
@@ -198,7 +198,7 @@ class PraxisBot(discord.Client):
 			scope.vars["target"] = member.name+"#"+member.discriminator
 
 			for p in self.shell.plugins:
-				await p.on_member_join(scope)
+				await p.on_member_join(scope) #Ask for each script to do its command on_member_join -> Trigger
 
 		except:
 			print(traceback.format_exc())

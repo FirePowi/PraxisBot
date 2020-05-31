@@ -437,11 +437,11 @@ class Shell:
 			scope.abort = True
 		except sqlite3.OperationalError as e:
 			print(traceback.format_exc())
-			await self.print_fatal(scope, "**SQL error.** Please contact <@287858556684730378>.\nCommand line: `"+commandline+"`");
+			await self.print_fatal(scope, "**SQL error.** Please contact <@203135242813440001>.\nCommand line: `"+commandline+"`");
 			scope.abort = True
 		except Exception as e:
 			print(traceback.format_exc())
-			await self.print_fatal(scope, "**PraxisBot Internal Error.** Please contact <@287858556684730378>.\nException: ``"+type(e).__name__+"``\nCommand line: `"+commandline+"`")
+			await self.print_fatal(scope, "**PraxisBot Internal Error.** Please contact <@203135242813440001>.\nException: ``"+type(e).__name__+"``\nCommand line: `"+commandline+"`")
 			scope.abort = True
 
 		return False
