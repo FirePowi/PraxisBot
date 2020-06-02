@@ -109,10 +109,10 @@ class EmojiPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Emoji `"+args.name+"` not found on this server.")
 			return
 		
-		await scope.channel.send("<:{}:{}>\n**ID: **{}\n**Name: **\n**URL: **{}".format(emoji.name,emoji.id,emoji.id,emoji.name,emoji.url))
+		await scope.channel.send("<:{}:{}>\n**ID: **{}\n**Name: {}**\n**URL: **{}".format(emoji.name,emoji.id,emoji.id,emoji.name,emoji.url))
 
 		msg = await scope.channel.send("<:{}:{}>".format(emoji.name,emoji.id))
-		await scope.shell.client.add_reaction(msg, emoji)
+		await msg.add_reaction(emoji)
 
 	@praxisbot.command
 	async def execute_emojis(self, scope, command, options, lines, **kwargs):

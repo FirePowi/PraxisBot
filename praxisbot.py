@@ -283,7 +283,7 @@ class ExecutionScope:
 			elif tag.lower() == "*role" and r:
 				tagOutput = r.id
 			elif tag.lower() == "#user" and u:
-				tagOutput = u.name+"#"+u.discriminator
+				tagOutput = "{}#{}".format(u.name,u.discriminator)
 			elif tag.lower() == "@user" and u:
 				tagOutput = u.mention
 			elif tag.lower() == "*user" and u:
@@ -337,27 +337,27 @@ class Shell:
 
 	async def print_debug(self, scope, msg):
 		if scope.verbose >= 3:
-			await scope.channel.send(":large_blue_circle: "+msg)
+			await scope.channel.send(":large_blue_circle: {}".format(msg))
 		return
 
 	async def print_success(self, scope, msg):
 		if scope.verbose >= 2:
-			await scope.channel.send(":white_check_mark: "+msg)
+			await scope.channel.send(":white_check_mark: {}".format(msg))
 		return
 
 	async def print_permission(self, scope, msg):
 		if scope.verbose >= 1:
-			await scope.channel.send(":closed_lock_with_key: "+msg)
+			await scope.channel.send(":closed_lock_with_key: {}".format(msg))
 		return
 
 	async def print_error(self, scope, msg):
 		if scope.verbose >= 1:
-			await scope.channel.send(":no_entry: "+msg)
+			await scope.channel.send(":no_entry: {}".format(msg))
 		return
 
 	async def print_fatal(self, scope, msg):
 		if scope.verbose >= 1:
-			await scope.channel.send(":skull_crossbones: "+msg)
+			await scope.channel.send(":skull_crossbones: {}".format(msg))
 		return
 
 	def load_plugin(self, plugin):
@@ -389,7 +389,7 @@ class Shell:
 
 		with self.dbcon:
 			c = self.dbcon.cursor()
-			for row in c.execute("SELECT name, value FROM "+self.dbtable("variables")+" WHERE discord_sid = ?", [int(scope.guild.id)]):
+			for row in c.execute("SELECT name, value FROM {} WHERE discord_sid = {}".format(self.dbtable("variables"),scope.guild.id)):
 				scope.vars[row[0]] = row[1]
 
 		return scope
@@ -411,36 +411,36 @@ class Shell:
 			raise CommandNotFoundError(parsedCommand[0])
 
 		except CommandNotFoundError as e:
-			await self.print_error(scope, "Command `"+e.command+"` not found.")
+			await self.print_error(scope, "Command `{}` not found.".format(e.command))
 			scope.abort = True
 		except AdminPermissionError as e:
-			await self.print_permission(scope, "This command is restricted to administrators.");
+			await self.print_permission(scope, "This command is restricted to administrators.")
 			scope.abort = True
 		except ScriptPermissionError as e:
-			await self.print_permission(scope, "This command is restricted to scripts and administrators.");
+			await self.print_permission(scope, "This command is restricted to scripts and administrators.")
 			scope.abort = True
 		except ParameterPermissionError as e:
-			await self.print_permission(scope, "You are not allowed to use the parameter `"+e.parameter+"`.");
+			await self.print_permission(scope, "You are not allowed to use the parameter `{}`.".format(e.parameter))
 			scope.abort = True
 		except ObjectNameError as e:
-			await self.print_error(scope, e.parameter+" must be a letter followed by alphanumeric characters.");
+			await self.print_error(scope, "{} must be a letter followed by alphanumeric characters.".format(e.parameter))
 			scope.abort = True
 		except ObjectIdError as e:
-			await self.print_error(scope, e.parameter+" must be a number.");
+			await self.print_error(scope, "{} must be a number.".format(e.parameter))
 			scope.abort = True
 		except IntegerError as e:
-			await self.print_error(scope, e.parameter+" must be a number.");
+			await self.print_error(scope, "{} must be a number.".format(e.parameter))
 			scope.abort = True
 		except RegexError as e:
-			await self.print_error(scope, "`"+e.regex+"` is not a valid regular expression.");
+			await self.print_error(scope, "`{}` is not a valid regular expression.".format(e.regex))
 			scope.abort = True
 		except sqlite3.OperationalError as e:
 			print(traceback.format_exc())
-			await self.print_fatal(scope, "**SQL error.** Please contact <@203135242813440001>.\nCommand line: `"+commandline+"`");
+			await self.print_fatal(scope, "**SQL error.** Please contact <@203135242813440001>.\nCommand line: `{}`".format(commandline))
 			scope.abort = True
 		except Exception as e:
 			print(traceback.format_exc())
-			await self.print_fatal(scope, "**PraxisBot Internal Error.** Please contact <@203135242813440001>.\nException: ``"+type(e).__name__+"``\nCommand line: `"+commandline+"`")
+			await self.print_fatal(scope, "**PraxisBot Internal Error.** Please contact <@203135242813440001>.\nException: ``{}``\nCommand line: `{}`".format(type(e).__name__,commandline))
 			scope.abort = True
 
 		return False
@@ -500,7 +500,7 @@ class Shell:
 				return m
 			if "<@!{}>".format(m.id) == member_name:
 				return m
-			elif m.name+"#"+m.discriminator == member_name:
+			elif "{}#{}".format(m.name,m.discriminator) == member_name:
 				return m
 			elif m.id == member_name:
 				return m
@@ -526,7 +526,7 @@ class Shell:
 			return None
 
 		for e in server.emojis:
-			if "<:"+e.name+":"+e.id+">" == emoji_name:
+			if "<:{}:{}>".format(e.name,e.id) == emoji_name:
 				return e
 			elif e.id == emoji_name:
 				return e
@@ -578,25 +578,25 @@ class Shell:
 		return self.dbprefix+name
 
 	def create_sql_table(self, tablename, fields):
-		sqlQuery = "CREATE TABLE IF NOT EXISTS "+self.dbtable(tablename)+" ("+", ".join(fields)+")"
+		sqlQuery = "CREATE TABLE IF NOT EXISTS {} ({})".format(self.dbtable(tablename),", ".join(fields))
 		self.dbcon.execute(sqlQuery);
 
 		for f in fields:
 			try:
-				sqlQuery = "ALTER TABLE "+self.dbtable(tablename)+" ADD "+f
+				sqlQuery = "ALTER TABLE {} ADD {}".format(self.dbtable(tablename),f)
 				self.dbcon.execute(sqlQuery);
 			except sqlite3.OperationalError:
 				pass
 
 	def get_sql_data(self, tablename, fields, where):
-		sqlQuery = "SELECT "+", ".join(fields)+" FROM "+self.dbtable(tablename)+" "
+		sqlQuery = "SELECT {} FROM {} ".format(", ".join(fields),self.dbtable(tablename))
 		vars = []
 		first = True
 		for w in where:
 			if first:
-				sqlQuery = sqlQuery+" WHERE "+w+" = ?"
+				sqlQuery = sqlQuery+" WHERE {} = ?".format(w)
 			else:
-				sqlQuery = sqlQuery+" AND "+w+" = ?"
+				sqlQuery = sqlQuery+" AND {} = ?".format(w)
 			vars.append(where[w])
 			first = False
 
@@ -611,22 +611,22 @@ class Shell:
 	def set_sql_data(self, tablename, fields, where, id="id"):
 		idFound = self.get_sql_data(tablename, [id], where)
 		if idFound:
-			sqlQuery = "UPDATE "+self.dbtable(tablename)+" "
+			sqlQuery = "UPDATE {} ".format(self.dbtable)
 			vars = []
 			first = True
 			for f in fields:
 				if first:
-					sqlQuery = sqlQuery+" SET "+f+" = ?"
+					sqlQuery = sqlQuery+" SET {} = ?".format(f)
 				else:
-					sqlQuery = sqlQuery+", "+f+" = ?"
+					sqlQuery = sqlQuery+", {} = ?".format(f)
 				vars.append(fields[f])
 				first = False
-			sqlQuery = sqlQuery+" WHERE "+id+" = ?"
+			sqlQuery = sqlQuery+" WHERE {} = ?".format(id)
 			vars.append(idFound[0])
 
 			self.dbcon.execute(sqlQuery, vars)
 		else:
-			sqlQuery = "INSERT INTO "+self.dbtable(tablename)+" ("
+			sqlQuery = "INSERT INTO {} (".format(self.dbtable(tablename))
 			vars = []
 			first = True
 			for f in fields:
