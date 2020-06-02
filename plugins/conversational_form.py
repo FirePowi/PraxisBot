@@ -113,7 +113,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 			return
 
 		node = self.sessions[key].current_node
-		node_data = scope.shell.get_sql_data("cf_nodes", ["script"], {"discord_sid":int(scope.server.id), "name":str(node)})
+		node_data = scope.shell.get_sql_data("cf_nodes", ["script"], {"discord_sid":int(scope.guild.id), "name":str(node)})
 		if not node_data:
 			del(self.sessions[key])
 			return
@@ -135,14 +135,14 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		if command_found:
 			return
 
-		session = self.get_session(scope.user, scope.channel, scope.server)
+		session = self.get_session(scope.user, scope.channel, scope.guild)
 		if not session:
 			return
 
 		node = session.current_node
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT node_end, script, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND type = ? ORDER BY priority DESC, node_start", [int(scope.server.id), str(node), int(LinkType.UserRegex)]):
+			for row in c.execute("SELECT node_end, script, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND type = ? ORDER BY priority DESC, node_start", [int(scope.guild.id), str(node), int(LinkType.UserRegex)]):
 				try:
 					if not re.search(row[2], message.content):
 						continue
@@ -151,10 +151,10 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 
 				subScope = scope.create_subscope()
 				subScope.vars["message"] = message.content
-				await self.execute_session_script(scope.user, scope.channel, scope.server, subScope, row[1])
+				await self.execute_session_script(scope.user, scope.channel, scope.guild, subScope, row[1])
 
 				session.current_node = row[0]
-				await self.execute_session_node(scope.user, scope.channel, scope.server, scope)
+				await self.execute_session_node(scope.user, scope.channel, scope.guild, scope)
 				return
 
 	def check_emoji(self, reaction, emoji):
@@ -162,18 +162,18 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		return e.startswith(emoji)
 
 	async def on_reaction(self, scope, reaction):
-		session = self.get_session(scope.user, scope.channel, scope.server)
+		session = self.get_session(scope.user, scope.channel, scope.guild)
 		if not session:
 			return
 		node = session.current_node
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT node_end, script, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND type = ? ORDER BY priority DESC, node_start", [int(scope.server.id), str(node), int(LinkType.Reaction)]):
+			for row in c.execute("SELECT node_end, script, value FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND type = ? ORDER BY priority DESC, node_start", [int(scope.guild.id), str(node), int(LinkType.Reaction)]):
 				if self.check_emoji(reaction, row[2]):
-					await self.execute_session_script(scope.user, scope.channel, scope.server, scope, row[1])
+					await self.execute_session_script(scope.user, scope.channel, scope.guild, scope, row[1])
 
 					session.current_node = row[0]
-					await self.execute_session_node(scope.user, scope.channel, scope.server, scope)
+					await self.execute_session_node(scope.user, scope.channel, scope.guild, scope)
 					return
 
 	@praxisbot.command
@@ -191,12 +191,12 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 
 		self.ensure_object_name("Node name", args.name)
 
-		#node = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.server.id), "name":str(args.name)})
+		#node = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.guild.id), "name":str(args.name)})
 		#if node:
 		#	await scope.shell.print_error(scope, "Node `"+args.name+"` already exists.")
 		#	return
 
-		scope.shell.set_sql_data("cf_nodes", {"script": "\n".join(lines)}, {"discord_sid":int(scope.server.id), "name":str(args.name)})
+		scope.shell.set_sql_data("cf_nodes", {"script": "\n".join(lines)}, {"discord_sid":int(scope.guild.id), "name":str(args.name)})
 		await scope.shell.print_success(scope, "Node `"+args.name+"` created.")
 
 	@praxisbot.command
@@ -227,21 +227,21 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 				await scope.shell.print_error(scope, "Priority must be a positive integer.")
 				return
 
-		node_start = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.server.id), "name":str(args.start)})
+		node_start = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.guild.id), "name":str(args.start)})
 		if not node_start:
 			await scope.shell.print_error(scope, "Node `"+args.start+"` not found.")
 			return
 
-		node_end = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.server.id), "name":str(args.end)})
+		node_end = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.guild.id), "name":str(args.end)})
 		if not node_end:
 			await scope.shell.print_error(scope, "Node `"+args.end+"` not found.")
 			return
 
 		if args.message:
 			self.ensure_regex(args.message)
-			scope.shell.set_sql_data("cf_links", {"script": "\n".join(lines), "type": LinkType.UserRegex, "value": args.message, "priority":int(priority)}, {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
+			scope.shell.set_sql_data("cf_links", {"script": "\n".join(lines), "type": LinkType.UserRegex, "value": args.message, "priority":int(priority)}, {"discord_sid":int(scope.guild.id), "node_start":str(args.start), "node_end":str(args.end)})
 		elif args.reaction:
-			scope.shell.set_sql_data("cf_links", {"script": "\n".join(lines), "type": LinkType.Reaction, "value": args.reaction, "priority":int(priority)}, {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
+			scope.shell.set_sql_data("cf_links", {"script": "\n".join(lines), "type": LinkType.Reaction, "value": args.reaction, "priority":int(priority)}, {"discord_sid":int(scope.guild.id), "node_start":str(args.start), "node_end":str(args.end)})
 		else:
 			await scope.shell.print_error(scope, "Missing type of link. Please use --message option.")
 			return
@@ -263,12 +263,12 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 
 		self.ensure_object_name("Node name", args.name)
 
-		node = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.server.id), "name":str(args.name)})
+		node = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.guild.id), "name":str(args.name)})
 		if not node:
 			await scope.shell.print_error(scope, "Node `"+args.name+"` not found.")
 			return
 
-		scope.shell.delete_sql_data("cf_nodes", {"discord_sid":int(scope.server.id), "name":str(args.name)})
+		scope.shell.delete_sql_data("cf_nodes", {"discord_sid":int(scope.guild.id), "name":str(args.name)})
 		await scope.shell.print_success(scope, "Node `"+args.name+"` delete.")
 
 	@praxisbot.command
@@ -288,12 +288,12 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		self.ensure_object_name("Node name", args.start)
 		self.ensure_object_name("Node name", args.end)
 
-		link = scope.shell.get_sql_data("cf_links", ["id"], {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
+		link = scope.shell.get_sql_data("cf_links", ["id"], {"discord_sid":int(scope.guild.id), "node_start":str(args.start), "node_end":str(args.end)})
 		if not link:
 			await scope.shell.print_error(scope, "Link `"+args.start+" → "+args.end+"` not found.")
 			return
 
-		scope.shell.delete_sql_data("cf_links", {"discord_sid":int(scope.server.id), "node_start":str(args.start), "node_end":str(args.end)})
+		scope.shell.delete_sql_data("cf_links", {"discord_sid":int(scope.guild.id), "node_start":str(args.start), "node_end":str(args.end)})
 		await scope.shell.print_success(scope, "Link `"+args.start+" → "+args.end+"` delete.")
 
 	@praxisbot.command
@@ -315,20 +315,20 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 			c1 = scope.shell.dbcon.cursor()
 
 			await stream.send("__**List of nodes**__")
-			for row in c0.execute("SELECT name, script FROM "+scope.shell.dbtable("cf_nodes")+" WHERE discord_sid = ? ORDER BY name", [int(scope.server.id)]):
+			for row in c0.execute("SELECT name, script FROM "+scope.shell.dbtable("cf_nodes")+" WHERE discord_sid = ? ORDER BY name", [int(scope.guild.id)]):
 				await stream.send("\n\n:triangular_flag_on_post: **"+row[0]+"**")
-				for link in c1.execute("SELECT node_start, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND node_end == node_start ORDER BY node_start, priority DESC", [int(scope.server.id), str(row[0])]):
+				for link in c1.execute("SELECT node_start, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND node_end == node_start ORDER BY node_start, priority DESC", [int(scope.guild.id), str(row[0])]):
 					await stream.send("\n - Self link: **"+str(row[0])+"** → **"+str(row[0])+"**")
-				for link in c1.execute("SELECT node_start, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_end = ? AND node_end != node_start ORDER BY node_start, priority DESC", [int(scope.server.id), str(row[0])]):
+				for link in c1.execute("SELECT node_start, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_end = ? AND node_end != node_start ORDER BY node_start, priority DESC", [int(scope.guild.id), str(row[0])]):
 					await stream.send("\n - Incoming link: "+link[0]+" → **"+str(row[0])+"**")
-				for link in c1.execute("SELECT node_end, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND node_end != node_start ORDER BY node_end, priority DESC", [int(scope.server.id), str(row[0])]):
+				for link in c1.execute("SELECT node_end, script FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? AND node_start = ? AND node_end != node_start ORDER BY node_end, priority DESC", [int(scope.guild.id), str(row[0])]):
 					await stream.send("\n - Outcoming link: **"+str(row[0])+"** → "+link[0])
 				if len(row[1]) > 0:
 					await stream.send("\n - Script:")
 					await stream.send("\n```\n"+row[1]+"\n```")
 
 			await stream.send("\n\n__**List of links**__")
-			for row in c0.execute("SELECT node_start, node_end, script, type, value, priority FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? ORDER BY node_start, node_end", [int(scope.server.id)]):
+			for row in c0.execute("SELECT node_start, node_end, script, type, value, priority FROM "+scope.shell.dbtable("cf_links")+" WHERE discord_sid = ? ORDER BY node_start, node_end", [int(scope.guild.id)]):
 				await stream.send("\n\n:link: **"+row[0]+" → "+row[1]+"**")
 				await stream.send("\n - Priority: "+str(row[5]))
 				if row[3] == LinkType.UserRegex:
@@ -358,7 +358,7 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 			return
 
 		self.ensure_object_name("Node name", args.node)
-		node_start = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.server.id), "name":str(args.node)})
+		node_start = scope.shell.get_sql_data("cf_nodes", ["id"], {"discord_sid":int(scope.guild.id), "name":str(args.node)})
 		if not node_start:
 			await scope.shell.print_error(scope, "Node `"+args.node+"` not found.")
 			return
@@ -377,8 +377,8 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 			else:
 				await scope.shell.print_error("Timeout must be in the format `Y-M-D H:M:S`")
 
-		self.start_session(scope.user, scope.channel, scope.server, args.node, timeout)
-		await self.execute_session_node(scope.user, scope.channel, scope.server, scope)
+		self.start_session(scope.user, scope.channel, scope.guild, args.node, timeout)
+		await self.execute_session_node(scope.user, scope.channel, scope.guild, scope)
 
 	@praxisbot.command
 	@praxisbot.permission_script
@@ -392,11 +392,11 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		if not self.get_session(scope.user, scope.channel, scope.server):
+		if not self.get_session(scope.user, scope.channel, scope.guild):
 			await scope.shell.print_error(scope, "No active conversational session found for you in this channel.")
 			return
 
-		self.end_session(scope.user, scope.channel, scope.server)
+		self.end_session(scope.user, scope.channel, scope.guild)
 
 
 	@praxisbot.command
@@ -415,13 +415,13 @@ class ConversationalFormPlugin(praxisbot.Plugin):
 		await stream.send("__**List of conversational sessions**__")
 
 		for s in self.sessions:
-			if scope.server.id != s[2]:
+			if scope.guild.id != s[2]:
 				continue
 
-			user = scope.shell.find_member(s[0], scope.server)
+			user = scope.shell.find_member(s[0], scope.guild)
 			if not user:
 				continue
-			channel = scope.shell.find_channel(s[1], scope.server)
+			channel = scope.shell.find_channel(s[1], scope.guild)
 			if not channel:
 				continue
 

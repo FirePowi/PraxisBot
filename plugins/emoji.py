@@ -57,7 +57,7 @@ class EmojiPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		emoji = scope.shell.find_emoji(args.name, scope.server)
+		emoji = scope.shell.find_emoji(args.name, scope.guild)
 		if emoji:
 			await scope.shell.print_error(scope, "An emoji with this name is already on this server: <:"+emoji.name+":"+emoji.id+">.")
 			return
@@ -68,7 +68,7 @@ class EmojiPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Can't download image located at:`"+url+"` ("+result.status_code+").")
 			return
 
-		emoji = await scope.shell.client.create_custom_emoji(scope.server, name=args.name, image=result.content)
+		emoji = await scope.shell.client.create_custom_emoji(scope.guild, name=args.name, image=result.content)
 		await scope.shell.print_success(scope, "Emoji `:"+emoji.name+":` <:"+emoji.name+":"+emoji.id+"> created.")
 
 	@praxisbot.command
@@ -84,7 +84,7 @@ class EmojiPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		emoji = scope.shell.find_emoji(args.name, scope.server)
+		emoji = scope.shell.find_emoji(args.name, scope.guild)
 		if not emoji:
 			await scope.shell.print_error(scope, "Emoji `"+args.name+"` not found on this server.")
 			return
@@ -104,14 +104,14 @@ class EmojiPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		emoji = scope.shell.find_emoji(args.name, scope.server)
+		emoji = scope.shell.find_emoji(args.name, scope.guild)
 		if not emoji:
 			await scope.shell.print_error(scope, "Emoji `"+args.name+"` not found on this server.")
 			return
+		
+		await scope.channel.send("<:{}:{}>\n**ID: **{}\n**Name: **\n**URL: **{}".format(emoji.name,emoji.id,emoji.id,emoji.name,emoji.url))
 
-		await scope.shell.client.send_message(scope.channel, "<:"+emoji.name+":"+emoji.id+">\n**ID: **"+str(emoji.id)+"\n**Name: **"+str(emoji.name)+"\n**URL: **"+str(emoji.url)+"")
-
-		msg = await scope.shell.client.send_message(scope.channel, "<:"+emoji.name+":"+emoji.id+">")
+		msg = await scope.channel.send("<:{}:{}>".format(emoji.name,emoji.id))
 		await scope.shell.client.add_reaction(msg, emoji)
 
 	@praxisbot.command
@@ -127,7 +127,7 @@ class EmojiPlugin(praxisbot.Plugin):
 
 		stream = praxisbot.MessageStream(scope)
 		await stream.send("**List of emojis**\n")
-		for e in scope.server.emojis:
+		for e in scope.guild.emojis:
 			await stream.send("\n - <:"+e.name+":"+e.id+"> `"+e.name+"`")
 
 		await stream.finish()

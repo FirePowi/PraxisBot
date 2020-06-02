@@ -61,7 +61,7 @@ class ModerationPlugin(praxisbot.Plugin):
 	def get_mod_level(self, member):
 		if not member:
 			return {
-				"name":"",
+				"name":"no mod level",
 				"priority":-1,
 				"ban_timelimit":0,
 				"ban_prioritylimit":-1,
@@ -70,7 +70,7 @@ class ModerationPlugin(praxisbot.Plugin):
 
 		with self.shell.dbcon:
 			c = self.shell.dbcon.cursor()
-			for row in c.execute("SELECT type, value, name, priority, ban_timelimit, ban_prioritylimit, purge FROM "+self.shell.dbtable("mod_levels")+" WHERE discord_sid = ? ORDER BY priority DESC", [int(member.server.id)]):
+			for row in c.execute("SELECT type, value, name, priority, ban_timelimit, ban_prioritylimit, purge FROM {} WHERE discord_sid = {} ORDER BY priority DESC".format(self.shell.dbtable("mod_levels"),member.guild.id)):
 				res = {
 					"name":row[2],
 					"priority":row[3],
@@ -91,19 +91,19 @@ class ModerationPlugin(praxisbot.Plugin):
 					res["purge"] = 0
 
 				if row[0] == ModLevelType.User:
-					if row[1] == member.id:
+					if member.id == int(row[1]):
 						return res
 				if row[0] == ModLevelType.Role:
 					for r in member.roles:
-						if r.id == row[1]:
+						if r.id == int(row[1]):
 							return res
 				if row[0] == ModLevelType.Channel:
-					chan = self.shell.find_channel("<#"+row[1]+">", member.server)
+					chan = self.shell.find_channel("<#{}>".format(row[1]),member.guild)
 					if chan and chan.permissions_for(member).send_messages:
 						return res
 
 		return {
-			"name":"",
+			"name":"no mod level",
 			"priority": 0,
 			"ban_timelimit": 0,
 			"ban_prioritylimit": -1,
@@ -156,17 +156,17 @@ class ModerationPlugin(praxisbot.Plugin):
 		if not args.user:
 			user = scope.user
 		else:
-			user = scope.shell.find_member(args.user, scope.server)
+			user = scope.shell.find_member(args.user, scope.guild)
 			if not user:
 				await scope.shell.print_error(scope, "User not found.")
 				return
 
 		clist = []
-		for c in scope.server.channels:
+		for c in scope.guild.channels:
 			if c.permissions_for(scope.user).read_messages and c.permissions_for(user).read_messages:
 				if c.type == discord.ChannelType.text:
 					pos = (c.position+1)*10
-					cat = c.server.get_channel(c.parent_id)
+					cat = c.guild.get_channel(c.parent_id)
 					if cat:
 						pos = pos+1000*(cat.position+1)
 
@@ -176,7 +176,7 @@ class ModerationPlugin(praxisbot.Plugin):
 						clist.append((pos, " :eye: "+c.name))
 				elif c.type == discord.ChannelType.voice:
 					pos = (c.position+1)*10
-					cat = c.server.get_channel(c.parent_id)
+					cat = c.guild.get_channel(c.parent_id)
 					if cat:
 						pos = pos+1000*(cat.position+1)
 
@@ -221,34 +221,34 @@ class ModerationPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "You must use one and only one of this options: --role, --channel, --user.")
 			return
 
-		modData = scope.shell.get_sql_data("mod_levels", ["id"], {"discord_sid": int(scope.server.id), "name": str(args.name)})
+		modData = scope.shell.get_sql_data("mod_levels", ["id"], {"discord_sid": int(scope.guild.id), "name": str(args.name)})
 		if modData:
 			await scope.shell.print_error(scope, "The moderator level `"+args.name+"` already exists.")
 			return
 
 		if args.channel:
-			chan = scope.shell.find_channel(args.channel, scope.server)
+			chan = scope.shell.find_channel(args.channel, scope.guild)
 			if not chan:
 				await scope.shell.print_error(scope, "Channel not found.")
 				return
 
-			scope.shell.add_sql_data("mod_levels", {"name": str(args.name), "discord_sid": int(scope.server.id), "type": ModLevelType.Channel, "value": int(chan.id), "priority": int(args.priority), "ban_timelimit": 0, "ban_prioritylimit": -1, "purge": 0, })
+			scope.shell.add_sql_data("mod_levels", {"name": str(args.name), "discord_sid": int(scope.guild.id), "type": ModLevelType.Channel, "value": int(chan.id), "priority": int(args.priority), "ban_timelimit": 0, "ban_prioritylimit": -1, "purge": 0, })
 
 		elif args.role:
-			role = scope.shell.find_role(args.role, scope.server)
+			role = scope.shell.find_role(args.role, scope.guild)
 			if not role:
 				await scope.shell.print_error(scope, "Role not found.")
 				return
 
-			scope.shell.add_sql_data("mod_levels", {"name": str(args.name), "discord_sid": int(scope.server.id), "type": ModLevelType.Role, "value": int(role.id), "priority": int(args.priority), "ban_timelimit": 0, "ban_prioritylimit": -1, "purge": 0, })
+			scope.shell.add_sql_data("mod_levels", {"name": str(args.name), "discord_sid": int(scope.guild.id), "type": ModLevelType.Role, "value": int(role.id), "priority": int(args.priority), "ban_timelimit": 0, "ban_prioritylimit": -1, "purge": 0, })
 
 		elif args.user:
-			user = scope.shell.find_member(args.user, scope.server)
+			user = scope.shell.find_member(args.user, scope.guild)
 			if not user:
 				await scope.shell.print_error(scope, "User not found.")
 				return
 
-			scope.shell.add_sql_data("mod_levels", {"name": str(args.name), "discord_sid": int(scope.server.id), "type": ModLevelType.User, "value": int(user.id), "priority": int(args.priority), "ban_timelimit": 0, "ban_prioritylimit": -1, "purge": 0, })
+			scope.shell.add_sql_data("mod_levels", {"name": str(args.name), "discord_sid": int(scope.guild.id), "type": ModLevelType.User, "value": int(user.id), "priority": int(args.priority), "ban_timelimit": 0, "ban_prioritylimit": -1, "purge": 0, })
 
 		await scope.shell.print_success(scope, "Moderator level created.")
 
@@ -265,7 +265,7 @@ class ModerationPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		modData = scope.shell.get_sql_data("mod_levels", ["id"], {"discord_sid": int(scope.server.id), "name": str(args.name)})
+		modData = scope.shell.get_sql_data("mod_levels", ["id"], {"discord_sid": int(scope.guild.id), "name": str(args.name)})
 		if not modData:
 			await scope.shell.print_error(scope, "Moderator level `"+args.name+"` not found.")
 			return
@@ -289,7 +289,7 @@ class ModerationPlugin(praxisbot.Plugin):
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT name, priority, ban_timelimit, ban_prioritylimit, purge FROM "+scope.shell.dbtable("mod_levels")+" WHERE discord_sid = ? ORDER BY priority DESC", [int(scope.server.id)]):
+			for row in c.execute("SELECT name, priority, ban_timelimit, ban_prioritylimit, purge FROM {} WHERE discord.sid = {} ORDER BY priority DESC".format(scope.shell.dbtable("mod_levels"),scope.guild.id)):
 				await stream.send("\n:label: **"+row[0]+"**")
 				await stream.send("\n   - Priority: "+str(row[1]))
 				if not row[2] or row[2] < 0:
@@ -322,7 +322,7 @@ class ModerationPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		member = scope.shell.find_member(scope.format_text(args.member), scope.server)
+		member = scope.shell.find_member(scope.format_text(args.member), scope.guild)
 		if not member:
 			await scope.shell.print_error(scope, "User not found.")
 			return
@@ -341,23 +341,23 @@ class ModerationPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		u = scope.shell.find_member(scope.format_text(args.member), scope.server)
+		u = scope.shell.find_member(scope.format_text(args.member), scope.guild)
 		if not u:
 			await scope.shell.print_error(scope, "User not found. User name must be of the form `@User#1234` or `User#1234`.")
 			return
 
 		if scope.user.id == u.id:
-			await scope.shell.print_error(scope, "You can't "+action_name+" yourself.")
+			await scope.shell.print_error(scope, "You can't {} yourself.".format(action_name))
 			return
 
 		userLevel = self.get_mod_level(scope.user)
 		targetLevel = self.get_mod_level(u)
 
 		if targetLevel["priority"] > userLevel["ban_prioritylimit"]:
-			await scope.shell.print_error(scope, "You can't "+action_name+" "+u.display_name+" with your level.")
+			await scope.shell.print_error(scope, "You can't {} {} with your level. You're permission level is : {} and you should be > {}.".format(action_name,u.display_name,userLevel["ban_prioritylimit"],targetLevel["priority"]))
 			return
 
-		banData = scope.shell.get_sql_data("ban_time", ["id", "last_time as 'last_time_ [timestamp]'"], {"discord_sid": int(scope.server.id), "discord_uid": int(scope.user.id)})
+		banData = scope.shell.get_sql_data("ban_time", ["id", "last_time as 'last_time_ [timestamp]'"], {"discord_sid": scope.guild.id, "discord_uid": scope.user.id})
 		if banData:
 
 			last_time = timezone('UTC').localize(banData[1])
@@ -365,7 +365,7 @@ class ModerationPlugin(praxisbot.Plugin):
 
 			end_time = last_time + datetime.timedelta(hours=userLevel["ban_timelimit"])
 			if end_time > now_time:
-				await scope.shell.print_error(scope, "You already used your right to "+action_name+" someone. Please wait until "+str(end_time)+".")
+				await scope.shell.print_error(scope, "You already used your right to {} someone. Please wait until {}. I consider you part of ".format(action_name,end_time,userLevel["name"]))
 				return
 
 		try:
@@ -376,16 +376,16 @@ class ModerationPlugin(praxisbot.Plugin):
 				elif len(lines) > 0:
 					reason = reason+": "+"\n".join(lines)
 
-				await scope.shell.client.ban(u, delete_message_days=0, reason=reason)
+				await scope.guild.ban(u, delete_message_days=0, reason=reason)
 			else:
-				await scope.shell.client.kick(u)
+				await scope.guild.kick(u)
 		except:
-			await scope.shell.print_error(scope, "You can't "+action_name+" "+u.display_name+" (please check that PraxisBot role is high enough).")
+			await scope.shell.print_error(scope, "You can't {} {} (please check that {} role is high enough).".format(action_name,u.display_name,scope.guild.me.name))
 			return
 
 		last_time = datetime.datetime.now(timezone('UTC'))
 
-		scope.shell.set_sql_data("ban_time", {"last_time": str(last_time)}, {"discord_sid": int(scope.server.id), "discord_uid": int(scope.user.id)})
+		scope.shell.set_sql_data("ban_time", {"last_time": str(last_time)}, {"discord_sid": int(scope.guild.id), "discord_uid": scope.user.id})
 		if action_name == "ban":
 			await scope.shell.print_success(scope, ""+u.display_name+" banned.")
 		else:
@@ -423,25 +423,24 @@ class ModerationPlugin(praxisbot.Plugin):
 		stream = praxisbot.MessageStream(scope)
 		await stream.send("**__Last bans__**")
 
-		bans = await scope.shell.client.get_ban_logs(scope.server, limit=5)
-		for b in bans:
-			author = b.author
+		async for b in scope.guild.audit_logs(action=discord.AuditLogAction.ban, limit=5):
+			user = b.user
 			target = b.target
 			reason = b.reason
 
-			if b.author.id == scope.shell.client.user.id:
-				#Try to find the true author in the reason
+			if b.user.id == scope.shell.client.user.id:
+				#Try to find the true author (user) in the reason
 				res = re.search("(.+#[0-9][0-9][0-9][0-9]) using ban command", b.reason)
 				if res:
-					u = scope.shell.find_member(res.group(1), scope.server)
+					u = scope.shell.find_member(res.group(1), scope.guild)
 					if u:
-						author = u
+						user = u
 
 				res = re.search("using ban command:(.+)", b.reason)
 				if res:
 					reason = res.group(1).strip()
 
-			await stream.send("\n\n**"+target.name+"#"+target.discriminator+" by "+author.name+"#"+author.discriminator+"**\n"+reason)
+			await stream.send("\n\n**{}#{} by {}#{}**\n{}".format(target.name,target.discriminator,user.name,user.discriminator,reason))
 
 		await stream.finish()
 
@@ -460,9 +459,9 @@ class ModerationPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		modLevel = scope.shell.get_sql_data("mod_levels", ["id", "ban_timelimit", "ban_prioritylimit", "purge"], {"discord_sid":int(scope.server.id), "name": str(args.name)})
+		modLevel = scope.shell.get_sql_data("mod_levels", ["id", "ban_timelimit", "ban_prioritylimit", "purge"], {"discord_sid":int(scope.guild.id), "name": str(args.name)})
 		if not modLevel:
-			scope.shell.print_error(scope, "Mod level `"+str(args.name)+"` not found.")
+			await scope.shell.print_error(scope, "Mod level `"+str(args.name)+"` not found.")
 			return
 
 		newBanTime = modLevel[1]

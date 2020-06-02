@@ -182,13 +182,13 @@ class CorePlugin(praxisbot.Plugin):
 				await scope.shell.print_error(scope, "The regular expression seems wrong.")
 				res = False
 		elif args.ismember:
-			u = scope.shell.find_member(scope.format_text(args.firstvar), scope.server)
+			u = scope.shell.find_member(scope.format_text(args.firstvar), scope.guild)
 			res = (u != None)
 		elif args.iswritable:
-			c = scope.shell.find_channel(scope.format_text(args.firstvar), scope.server)
+			c = scope.shell.find_channel(scope.format_text(args.firstvar), scope.guild)
 			res = (c and c.permissions_for(scope.user).send_messages and c.permissions_for(scope.user).read_messages)
 		elif args.isrole:
-			u = scope.shell.find_role(scope.format_text(args.firstvar), scope.server)
+			u = scope.shell.find_role(scope.format_text(args.firstvar), scope.guild)
 			res = (u != None)
 		elif args.isdate:
 			try:
@@ -197,11 +197,11 @@ class CorePlugin(praxisbot.Plugin):
 			except ValueError:
 				res = False
 		elif args.hasroles:
-			u = scope.shell.find_member(scope.format_text(args.firstvar), scope.server)
+			u = scope.shell.find_member(scope.format_text(args.firstvar), scope.guild)
 			r = []
 			for i in args.hasroles:
 				formatedRole = scope.format_text(i)
-				role = scope.shell.find_role(formatedRole, scope.server)
+				role = scope.shell.find_role(formatedRole, scope.guild)
 				if role:
 					r.append(role)
 			if u:
@@ -348,13 +348,13 @@ class CorePlugin(praxisbot.Plugin):
 			error = False
 			for r in args.members:
 				r_name = scope.format_text(r)
-				r_found = scope.shell.find_role(r_name, scope.server)
+				r_found = scope.shell.find_role(r_name, scope.guild)
 				if r_found:
 					role_list.add(r_found)
 				else:
 					await scope.shell.print_error(scope, "`"+r_name+"` is not a valid role")
 					error = True
-			for m in scope.server.members:
+			for m in scope.guild.members:
 				if len(role_list) > 0:
 					for r in m.roles:
 						if not r.is_everyone and r in role_list:
@@ -375,7 +375,7 @@ class CorePlugin(praxisbot.Plugin):
 			scope.session_vars[var] = val
 
 		if args.glob:
-			scope.shell.set_sql_data("variables", {"value":str(val)}, {"discord_sid": int(scope.server.id), "name": str(var)})
+			scope.shell.set_sql_data("variables", {"value":str(val)}, {"discord_sid": int(scope.guild.id), "name": str(var)})
 
 		await scope.shell.print_success(scope, "`"+str(var)+"` is now equal to:\n```\n"+str(val)+"```")
 
@@ -426,7 +426,7 @@ class CorePlugin(praxisbot.Plugin):
 			return
 
 		if args.channel:
-			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.server)
+			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.guild)
 		else:
 			chan = scope.channel
 
@@ -487,7 +487,7 @@ class CorePlugin(praxisbot.Plugin):
 						field_key = None
 
 		if e or len(formatedText) > 0:
-			msg = await scope.shell.send_message(subScope.channel, formatedText, e)
+			msg = await subScope.channel.send(formatedText, embed=e)
 			if args.reactions:
 				for emoji in args.reactions:
 					try:
@@ -511,7 +511,7 @@ class CorePlugin(praxisbot.Plugin):
 			return
 
 		formatedUser = scope.format_text(args.user)
-		u = scope.shell.find_member(formatedUser, scope.server)
+		u = scope.shell.find_member(formatedUser, scope.guild)
 		if not u:
 			await scope.shell.print_error(scope, "Member `"+formatedUser+"` not found.")
 			return
@@ -520,12 +520,12 @@ class CorePlugin(praxisbot.Plugin):
 		rolesToRemove = []
 		for a in args.add:
 			formatedRole = scope.format_text(a)
-			role = scope.shell.find_role(formatedRole, scope.server)
+			role = scope.shell.find_role(formatedRole, scope.guild)
 			if role:
 				rolesToAdd.append(role)
 		for a in args.remove:
 			formatedRole = scope.format_text(a)
-			role = scope.shell.find_role(formatedRole, scope.server)
+			role = scope.shell.find_role(formatedRole, scope.guild)
 			if role:
 				rolesToRemove.append(role)
 
@@ -553,7 +553,7 @@ class CorePlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		scope.shell.set_sql_data("servers", {"command_prefix": str(args.prefix)}, {"discord_sid": int(scope.server.id)}, "discord_sid")
+		scope.shell.set_sql_data("servers", {"command_prefix": str(args.prefix)}, {"discord_sid": int(scope.guild.id)}, "discord_sid")
 		await scope.shell.print_success(scope, "Command prefix changed to ``"+args.prefix+"``.")
 
 	@praxisbot.command
@@ -608,7 +608,7 @@ class CorePlugin(praxisbot.Plugin):
 			return
 
 		if args.channel:
-			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.server)
+			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.guild)
 		else:
 			chan = scope.channel
 
@@ -620,15 +620,15 @@ class CorePlugin(praxisbot.Plugin):
 			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
 			return
 
-		u = scope.shell.find_member(scope.format_text(args.user), scope.server)
+		u = scope.shell.find_member(scope.format_text(args.user), scope.guild)
 		if not u:
 			await scope.shell.print_error(scope, "User not found. User name must be of the form `@User#1234` or `User#1234`.")
 			return
 
 		e = discord.Embed();
 		e.type = "rich"
-		e.set_author(name=u.name+"#"+u.discriminator, icon_url=u.avatar_url.replace(".webp", ".png"))
-		e.set_thumbnail(url=u.avatar_url.replace(".webp", ".png"))
+		e.set_author(name="{}#{}".format(u.name,u.discriminator), icon_url=u.avatar_url_as(format="png"))
+		e.set_thumbnail(url=u.avatar_url_as(format="png"))
 
 		e.add_field(name="Nickname", value=str(u.display_name))
 		e.add_field(name="Discord ID", value=str(u.id))
@@ -638,56 +638,31 @@ class CorePlugin(praxisbot.Plugin):
 		e.add_field(name="Created since", value=str(datetime.datetime.utcnow() - u.created_at))
 		e.add_field(name="Joined since", value=str(datetime.datetime.utcnow() - u.joined_at))
 
-		if u.server_permissions.administrator:
+		if u.guild_permissions.administrator:
 			e.add_field(name="Administrator", value=":crown: Yes")
-		if u.server_permissions.manage_server:
-			e.add_field(name="Manage server", value=":tools: Yes")
-		if u.server_permissions.manage_channels:
+		if u.guild_permissions.manage_guild:
+			e.add_field(name="Manage guild", value=":tools: Yes")
+		if u.guild_permissions.manage_channels:
 			e.add_field(name="Manage channels", value=":tools: Yes")
-		if u.server_permissions.manage_messages:
+		if u.guild_permissions.manage_messages:
 			e.add_field(name="Manage messages", value=":speech_balloon: Yes")
-		if u.server_permissions.view_audit_logs:
-			e.add_field(name="View audit logs", value=":eye: Yes")
-		if u.server_permissions.ban_members:
+		if u.guild_permissions.view_audit_log:
+			e.add_field(name="View audit log", value=":eye: Yes")
+		if u.guild_permissions.ban_members:
 			e.add_field(name="Ban members", value=":punch: Yes")
-		if u.server_permissions.kick_members:
+		if u.guild_permissions.kick_members:
 			e.add_field(name="Kick members", value=":punch: Yes")
-		if u.server_permissions.mention_everyone:
+		if u.guild_permissions.mention_everyone:
 			e.add_field(name="Mention everyone", value=":loudspeaker: Yes")
-
-		try:
-			counter = await scope.shell.client_human.count_messages(scope.server, author=u)
-			e.add_field(name="Total messages", value=str(counter))
-		except:
-			pass
-
-		try:
-			counter = await scope.shell.client_human.count_messages(scope.server, author=u, after=datetime.datetime.utcnow() - relativedelta(months=1))
-			e.add_field(name="Messages last month", value=str(counter))
-		except:
-			pass
 
 		roles = []
 		for r in u.roles:
-			if not r.is_everyone:
+			if not r.is_default():
 				roles.append(r.name)
 		if len(roles):
 			e.add_field(name="Roles", value=", ".join(roles))
 
-		try:
-			profile = await scope.shell.client_human.get_user_profile(u.id)
-
-			stream = praxisbot.MessageStream(scope)
-			for ca in profile.connected_accounts:
-				url = ca.url
-				if url:
-					e.add_field(name=ca.provider_name, value=url)
-				else:
-					e.add_field(name=ca.provider_name, value=ca.name)
-		except:
-			pass
-
-		await scope.shell.client.send_message(chan, "", embed=e)
+		await chan.send("", embed=e)
 
 	@praxisbot.command
 	async def execute_delete_message(self, scope, command, options, lines, **kwargs):
@@ -744,17 +719,17 @@ class CorePlugin(praxisbot.Plugin):
 
 		urlParser = re.match("https\:\/\/discordapp.com\/channels\/([0-9]+)\/([0-9]+)\/([0-9]+)", args.messageid)
 		if urlParser:
-			args.server = urlParser.group(1)
+			args.guild = urlParser.group(1)
 			args.channel = urlParser.group(2)
 			args.messageid = urlParser.group(3)
 
-		if args.server:
-			server = scope.shell.find_server(scope.format_text(args.server).strip())
+		if args.guild:
+			server = scope.shell.find_server(scope.format_text(args.guild).strip())
 		else:
-			server = scope.server
+			server = scope.guild
 
 		if not server:
-			await scope.shell.print_error(scope, "Unknown server `"+args.server+"`.")
+			await scope.shell.print_error(scope, "Unknown server `"+args.guild+"`.")
 			return
 
 		if args.channel:
@@ -809,11 +784,11 @@ class CorePlugin(praxisbot.Plugin):
 		e = discord.Embed();
 		e.type = "rich"
 		chan_name = "#"+chan.name
-		if server.id != scope.server.id:
+		if server.id != scope.guild.id:
 			chan_name = chan_name+" ("+server.name+")"
 		e.set_author(name=msg.author.display_name+duration+" in "+chan_name, icon_url=msg.author.avatar_url.replace(".webp", ".png"))
 		e.description = msg.content
 		e.set_footer(text="Cited by "+scope.user.display_name)
 
-		await scope.shell.client.send_message(scope.channel, "", embed=e)
+		await scope.channel.send("", embed=e)
 		scope.deletecmd = True

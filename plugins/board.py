@@ -71,7 +71,7 @@ class BoardPlugin(praxisbot.Plugin):
 		self.ensure_object_name("Board name", boardname)
 
 		if args.channel:
-			chan = scope.shell.find_channel(args.channel, scope.server)
+			chan = scope.shell.find_channel(args.channel, scope.guild)
 		else:
 			chan = scope.channel
 
@@ -83,7 +83,7 @@ class BoardPlugin(praxisbot.Plugin):
 			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
 			return
 
-		boardId = scope.shell.get_sql_data("boards", ["id"], {"discord_sid": int(scope.server.id), "name": str(boardname)})
+		boardId = scope.shell.get_sql_data("boards", ["id"], {"discord_sid": int(scope.guild.id), "name": str(boardname)})
 		if boardId:
 			await scope.shell.print_error(scope, "The board `"+boardname+"` already exists.")
 			return
@@ -99,8 +99,8 @@ class BoardPlugin(praxisbot.Plugin):
 			content = scope.format_text(content)
 
 		e = self.create_embed(boardname, scope.user);
-		m = await scope.shell.client.send_message(chan, content, embed=e)
-		scope.shell.set_sql_data("boards", {"discord_cid": int(m.channel.id), "discord_mid": int(m.id)}, {"discord_sid": int(m.server.id), "name": str(boardname)})
+		m = await chan.send(content, embed=e)
+		scope.shell.set_sql_data("boards", {"discord_cid": int(m.channel.id), "discord_mid": int(m.id)}, {"discord_sid": int(m.guild.id), "name": str(boardname)})
 
 	@praxisbot.command
 	async def execute_delete_board(self, scope, command, options, lines, **kwargs):
@@ -117,12 +117,12 @@ class BoardPlugin(praxisbot.Plugin):
 		boardname = scope.format_text(args.boardname)
 		self.ensure_object_name("Board name", boardname)
 
-		board = scope.shell.get_sql_data("boards", ["id", "discord_cid", "discord_mid"], {"discord_sid": int(scope.server.id), "name": str(boardname)})
+		board = scope.shell.get_sql_data("boards", ["id", "discord_cid", "discord_mid"], {"discord_sid": int(scope.guild.id), "name": str(boardname)})
 		if not board:
 			await scope.shell.print_error(scope, "Board `"+boardname+"` not found.")
 			return
 
-		chan = scope.shell.find_channel(str(board[1]), scope.server)
+		chan = scope.shell.find_channel(str(board[1]), scope.guild)
 		if chan and scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).send_messages:
 			await scope.shell.print_permission(scope, "You don't have write permission in this channel.")
 			return
@@ -148,12 +148,12 @@ class BoardPlugin(praxisbot.Plugin):
 		boardname = scope.format_text(args.boardname)
 		self.ensure_object_name("Board name", boardname)
 
-		board = scope.shell.get_sql_data("boards", ["id", "discord_cid", "discord_mid"], {"discord_sid": int(scope.server.id), "name": str(boardname)})
+		board = scope.shell.get_sql_data("boards", ["id", "discord_cid", "discord_mid"], {"discord_sid": int(scope.guild.id), "name": str(boardname)})
 		if not board:
 			await scope.shell.print_error(scope, "Board `"+boardname+"` not found.")
 			return
 
-		chan = scope.shell.find_channel(str(board[1]), scope.server)
+		chan = scope.shell.find_channel(str(board[1]), scope.guild)
 		if not chan:
 			await scope.shell.print_error(scope, "The channel associated with this board is not accessible.")
 			return
@@ -200,12 +200,12 @@ class BoardPlugin(praxisbot.Plugin):
 		boardname = scope.format_text(args.boardname)
 		self.ensure_object_name("Board name", boardname)
 
-		board = scope.shell.get_sql_data("boards", ["id", "discord_cid", "discord_mid"], {"discord_sid": int(scope.server.id), "name": str(boardname)})
+		board = scope.shell.get_sql_data("boards", ["id", "discord_cid", "discord_mid"], {"discord_sid": int(scope.guild.id), "name": str(boardname)})
 		if not board:
 			await scope.shell.print_error(scope, "Board `"+boardname+"` not found.")
 			return
 
-		chan = scope.shell.find_channel(str(board[1]), scope.server)
+		chan = scope.shell.find_channel(str(board[1]), scope.guild)
 		if not chan:
 			await scope.shell.print_error(scope, "The channel associated with this board is not accessible.")
 			return
@@ -222,7 +222,7 @@ class BoardPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "The message associated with this board is not accessible.")
 			return scope
 
-		await scope.shell.client.send_message(scope.channel, "```"+m.content+"```")
+		await scope.channel.send("```{}```".format(m.content))
 
 	@praxisbot.command
 	async def execute_boards(self, scope, command, options, lines, **kwargs):
@@ -240,9 +240,9 @@ class BoardPlugin(praxisbot.Plugin):
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT name, discord_cid FROM "+scope.shell.dbtable("boards")+" WHERE discord_sid = ? ORDER BY name", [int(scope.server.id)]):
+			for row in c.execute("SELECT name, discord_cid FROM "+scope.shell.dbtable("boards")+" WHERE discord_sid = ? ORDER BY name", [int(scope.guild.id)]):
 
-				chan = scope.shell.find_channel(str(row[1]), scope.server)
+				chan = scope.shell.find_channel(str(row[1]), scope.guild)
 				if not chan:
 					continue
 				if scope.permission < praxisbot.UserPermission.Script and not chan.permissions_for(scope.user).read_messages:

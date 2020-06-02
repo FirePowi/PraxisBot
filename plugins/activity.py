@@ -99,10 +99,6 @@ class ActivityPlugin(praxisbot.Plugin):
 			start_date = datetime.datetime.utcnow() - relativedelta(hours=i)
 			end_date = datetime.datetime.utcnow() - relativedelta(hours=i-1)
 			counter = 0
-			try:
-				counter = await scope.shell.client_human.count_messages(scope.server, after=start_date, before=end_date)
-			except:
-				pass
 			if counter > counter_max:
 				counter_max = counter
 			counters.append({"counter":counter, "start_date":start_date, "end_date":end_date})
@@ -126,10 +122,6 @@ class ActivityPlugin(praxisbot.Plugin):
 			start_date = datetime.datetime.utcnow() - relativedelta(days=i)
 			end_date = datetime.datetime.utcnow() - relativedelta(days=i-1)
 			counter = 0
-			try:
-				counter = await scope.shell.client_human.count_messages(scope.server, after=start_date, before=end_date)
-			except:
-				pass
 			if counter > counter_max:
 				counter_max = counter
 			counters.append({"counter":counter, "start_date":start_date, "end_date":end_date})
@@ -153,10 +145,6 @@ class ActivityPlugin(praxisbot.Plugin):
 			start_date = datetime.datetime.utcnow() - relativedelta(months=i)
 			end_date = datetime.datetime.utcnow() - relativedelta(months=i-1)
 			counter = 0
-			try:
-				counter = await scope.shell.client_human.count_messages(scope.server, after=start_date, before=end_date)
-			except:
-				pass
 			if counter > counter_max:
 				counter_max = counter
 			counters.append({"counter":counter, "start_date":start_date, "end_date":end_date})

@@ -49,13 +49,11 @@ from plugins.math import MathPlugin
 ########################################################################
 # Init
 
-if len(sys.argv) < 4:
-	print("Usage: "+sys.argv[0]+" <BOT_TOKEN> <HUMAN_EMAIL> <HUMAN_PASSWORD>")
+if len(sys.argv) < 2:
+	print("Usage: "+sys.argv[0]+" <BOT_TOKEN>")
 	exit(0)
 
 botToken = sys.argv[1]
-humanEmail = sys.argv[2]
-humanPassword = sys.argv[3]
 
 ########################################################################
 # Human
@@ -77,7 +75,7 @@ class PraxisBot(discord.Client):
 	The main class of PraxisBot
 	"""
 
-	def __init__(self, client_human):
+	def __init__(self):
 		super().__init__()
 
 		self.mode = "testing"
@@ -89,7 +87,7 @@ class PraxisBot(discord.Client):
 			#Server list
 			self.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.dbprefix+"servers(discord_sid INTEGER PRIMARY KEY, command_prefix TEXT)");
 
-		self.shell = praxisbot.Shell(self, client_human, self.dbprefix, self.dbcon)
+		self.shell = praxisbot.Shell(self, self.dbprefix, self.dbcon)
 
 		self.loopstarted = False
 
@@ -124,7 +122,7 @@ class PraxisBot(discord.Client):
 					await asyncio.sleep(sleepDuration)
 
 				for p in self.shell.plugins:
-					for s in self.servers:
+					for s in self.guilds:
 						scope = self.shell.create_scope(s, [""])
 						scope.channel = self.shell.get_default_channel(s)
 						scope.user = s.me
@@ -137,14 +135,14 @@ class PraxisBot(discord.Client):
 							pass
 
 	async def on_reaction_add(self, reaction, user):
-		if reaction.message.channel.is_private:
+		if type(reaction.message.channel) == discord.DMChannel:
 			return
 		if user.__class__ != discord.Member:
 			return
 		if user.bot:
 			return
 
-		scope = self.shell.create_scope(reaction.message.server, [""])
+		scope = self.shell.create_scope(reaction.message.guild, [""])
 		scope.channel = reaction.message.channel
 		scope.user = user
 		scope.permission = praxisbot.UserPermission.Script
@@ -156,7 +154,7 @@ class PraxisBot(discord.Client):
 				pass
 
 	async def on_message(self, message):
-		if message.channel.is_private:
+		if type(message.channel) == discord.DMChannel:
 			return
 		if message.author.__class__ != discord.Member:
 			return
@@ -165,16 +163,16 @@ class PraxisBot(discord.Client):
 
 		prefixes = ["-"]
 
-		customCommandPrefix = self.shell.get_sql_data("servers", ["command_prefix"], {"discord_sid": int(message.server.id)})
+		customCommandPrefix = self.shell.get_sql_data("servers", ["command_prefix"], {"discord_sid": int(message.guild.id)})
 		if customCommandPrefix:
 			prefixes.append(customCommandPrefix[0])
 
-		scope = self.shell.create_scope(message.server, prefixes)
+		scope = self.shell.create_scope(message.guild, prefixes)
 		scope.channel = message.channel
 		scope.user = message.author
-		if message.author.id == message.server.owner.id or message.author == discord.AppInfo.owner:
+		if message.author.id == message.guild.owner.id:
 			scope.permission = praxisbot.UserPermission.Owner
-		elif message.author.server_permissions.administrator or message:
+		elif message.author.guild_permissions.administrator or message:
 			scope.permission = praxisbot.UserPermission.Admin
 
 		command_found = await self.shell.execute_command(scope, message.content)
@@ -191,9 +189,9 @@ class PraxisBot(discord.Client):
 
 	async def on_member_join(self, member):
 		try:
-			scope = self.shell.create_scope(member.server, [""])
-			scope.channel = self.shell.get_default_channel(member.server)
-			scope.user = member.server.me
+			scope = self.shell.create_scope(member.guild, [""])
+			scope.channel = self.shell.get_default_channel(member.guild)
+			scope.user = member.guild.me
 			scope.permission = praxisbot.UserPermission.Script
 			scope.vars["target"] = member.name+"#"+member.discriminator
 
@@ -213,9 +211,9 @@ class PraxisBot(discord.Client):
 				reason = "ban"
 
 		try:
-			scope = self.shell.create_scope(member.server, [""])
-			scope.channel = self.shell.get_default_channel(member.server)
-			scope.user = member.server.me
+			scope = self.shell.create_scope(member.guild, [""])
+			scope.channel = self.shell.get_default_channel(member.guild)
+			scope.user = member.guild.me
 			scope.permission = praxisbot.UserPermission.Script
 			scope.vars["target"] = member.name+"#"+member.discriminator
 			scope.vars["reason"] = reason
@@ -227,11 +225,9 @@ class PraxisBot(discord.Client):
 			print(traceback.format_exc())
 			pass
 
-	async def on_member_ban(self, member):
-
+	async def on_member_ban(self, guild, member):
 		self.banned_members[member.id] = datetime.datetime.now()
-
-		ban_author = ""
+		ban_user = ""
 		ban_target = ""
 		ban_reason = ""
 		ban_found_in_logs = False
@@ -244,26 +240,24 @@ class PraxisBot(discord.Client):
 				if duration > 60:
 					break
 
-				bans = await self.shell.client.get_ban_logs(member.server, limit=10)
-
-				for b in bans:
+				async for b in guild.audit_logs(action=discord.AuditLogAction.ban, limit=10):
 					if b.target.id == member.id:
-						author = b.author
+						user = b.user
 						reason = b.reason
 
-						if b.author.id == self.shell.client.user.id:
-							#Try to find the true author in the reason
+						if b.user.id == self.shell.client.user.id:
+							#Try to find the true author (user) in the reason
 							res = re.search("(.+#[0-9][0-9][0-9][0-9]) using ban command", b.reason)
 							if res:
-								u = self.shell.find_member(res.group(1), member.server)
+								u = self.shell.find_member(res.group(1), member.guild)
 								if u:
-									author = u
+									user = u
 
 							res = re.search("using ban command:(.+)", b.reason)
 							if res:
 								reason = res.group(1).strip()
 
-						ban_author = author.name+"#"+author.discriminator
+						ban_user = "{}#{}".format(user.name,user.discriminator)
 						ban_reason = reason
 						ban_target = b.target.name+"#"+b.target.discriminator
 						ban_found_in_logs = True
@@ -273,12 +267,12 @@ class PraxisBot(discord.Client):
 			pass
 
 		try:
-			scope = self.shell.create_scope(member.server, [""])
-			scope.channel = self.shell.get_default_channel(member.server)
-			scope.user = member.server.me
+			scope = self.shell.create_scope(member.guild, [""])
+			scope.channel = self.shell.get_default_channel(member.guild)
+			scope.user = member.guild.me
 			scope.permission = praxisbot.UserPermission.Script
 			scope.vars["reason"] = ban_reason
-			scope.vars["author"] = ban_author
+			scope.vars["user"] = ban_user
 			scope.vars["target"] = member.name+"#"+member.discriminator
 
 			for p in self.shell.plugins:
@@ -307,10 +301,7 @@ class PraxisBot(discord.Client):
 # Execute
 
 try:
-	human = PraxisHuman()
-	human.loop.create_task(human.start(humanEmail, humanPassword))
-
-	bot = PraxisBot(human)
+	bot = PraxisBot()
 	bot.run(botToken)
 
 except KeyboardInterrupt:

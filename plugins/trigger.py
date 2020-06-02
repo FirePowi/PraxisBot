@@ -63,7 +63,7 @@ class TriggerPlugin(praxisbot.Plugin):
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT regex, script FROM "+scope.shell.dbtable("message_triggers")+" WHERE discord_sid = ?", [int(scope.server.id)]):
+			for row in c.execute("SELECT regex, script FROM "+scope.shell.dbtable("message_triggers")+" WHERE discord_sid = ?", [int(scope.guild.id)]):
 				try:
 					if re.search(row[0], message.content):
 						subScope = scope.create_subscope()
@@ -82,7 +82,7 @@ class TriggerPlugin(praxisbot.Plugin):
 		triggersToUpdate = {}
 
 		c = scope.shell.dbcon.cursor()
-		for row in c.execute("SELECT id, script, num_iterations, start_time, datetime('now') FROM "+scope.shell.dbtable("time_triggers")+" WHERE discord_sid = ? AND start_time < datetime('now')", [int(scope.server.id)]):
+		for row in c.execute("SELECT id, script, num_iterations, start_time, datetime('now') FROM "+scope.shell.dbtable("time_triggers")+" WHERE discord_sid = ? AND start_time < datetime('now')", [int(scope.guild.id)]):
 			triggersToUpdate[row[0]] = row[2]
 
 			subScope = scope.create_subscope()
@@ -115,7 +115,7 @@ class TriggerPlugin(praxisbot.Plugin):
 		return True
 
 	async def execute_trigger_script(self, scope, command, options, lines, **kwargs):
-		script = scope.shell.get_sql_data("triggers", ["script"], {"discord_sid":int(scope.server.id), "command":command})
+		script = scope.shell.get_sql_data("triggers", ["script"], {"discord_sid":int(scope.guild.id), "command":command})
 		if not script:
 			return False
 
@@ -150,7 +150,7 @@ class TriggerPlugin(praxisbot.Plugin):
 		if args.message:
 			self.ensure_object_id("Message trigger ID", args.command)
 
-			trigger = scope.shell.get_sql_data("message_triggers", ["id"], {"discord_sid":int(scope.server.id), "id":int(args.command)})
+			trigger = scope.shell.get_sql_data("message_triggers", ["id"], {"discord_sid":int(scope.guild.id), "id":int(args.command)})
 			if not trigger:
 				await scope.shell.print_error(scope, "Message trigger #"+args.command+" not found. Please check existing message triggers with `message_triggers`.")
 				return
@@ -160,7 +160,7 @@ class TriggerPlugin(praxisbot.Plugin):
 		elif args.time:
 			self.ensure_object_id("Time trigger ID", args.command)
 
-			trigger = scope.shell.get_sql_data("time_triggers", ["id"], {"discord_sid":int(scope.server.id), "id":int(args.command)})
+			trigger = scope.shell.get_sql_data("time_triggers", ["id"], {"discord_sid":int(scope.guild.id), "id":int(args.command)})
 			if not trigger:
 				await scope.shell.print_error(scope, "Time trigger #"+args.command+" not found. Please check existing time triggers with `time_triggers`.")
 				return
@@ -171,7 +171,7 @@ class TriggerPlugin(praxisbot.Plugin):
 			if args.command not in ["@join", "@leave", "@ban", "@unban"]:
 				self.ensure_object_name("Command name", args.command)
 
-			trigger = scope.shell.get_sql_data("triggers", ["id"], {"discord_sid":int(scope.server.id), "command":str(args.command)})
+			trigger = scope.shell.get_sql_data("triggers", ["id"], {"discord_sid":int(scope.guild.id), "command":str(args.command)})
 			if not trigger:
 				await scope.shell.print_error(scope, "Trigger `"+args.command+"` not found.")
 				return
@@ -197,7 +197,7 @@ class TriggerPlugin(praxisbot.Plugin):
 		if args.message:
 			self.ensure_object_id("Message trigger ID", args.command)
 
-			trigger = scope.shell.get_sql_data("message_triggers", ["id"], {"discord_sid":int(scope.server.id), "id":int(args.command)})
+			trigger = scope.shell.get_sql_data("message_triggers", ["id"], {"discord_sid":int(scope.guild.id), "id":int(args.command)})
 			if not trigger:
 				await scope.shell.print_error(scope, "Message trigger #"+args.command+" not found. Please check existing message triggers with `message_triggers`.")
 				return
@@ -207,7 +207,7 @@ class TriggerPlugin(praxisbot.Plugin):
 		elif args.time:
 			self.ensure_object_id("Time trigger ID", args.command)
 
-			trigger = scope.shell.get_sql_data("time_triggers", ["id"], {"discord_sid":int(scope.server.id), "id":int(args.command)})
+			trigger = scope.shell.get_sql_data("time_triggers", ["id"], {"discord_sid":int(scope.guild.id), "id":int(args.command)})
 			if not trigger:
 				await scope.shell.print_error(scope, "Time trigger #"+args.command+" not found. Please check existing time triggers with `time_triggers`.")
 				return
@@ -218,7 +218,7 @@ class TriggerPlugin(praxisbot.Plugin):
 			if args.command not in ["@join", "@leave", "@ban", "@unban"]:
 				self.ensure_object_name("Command name", args.command)
 
-			trigger = scope.shell.get_sql_data("triggers", ["id"], {"discord_sid":int(scope.server.id), "command":str(args.command)})
+			trigger = scope.shell.get_sql_data("triggers", ["id"], {"discord_sid":int(scope.guild.id), "command":str(args.command)})
 			if not trigger:
 				await scope.shell.print_error(scope, "Trigger `"+args.command+"` not found.")
 				return
@@ -243,7 +243,7 @@ class TriggerPlugin(praxisbot.Plugin):
 		if args.message:
 			self.ensure_object_id("Message trigger ID", args.command)
 
-			trigger = scope.shell.get_sql_data("message_triggers", ["script"], {"discord_sid":int(scope.server.id), "id":int(args.command)})
+			trigger = scope.shell.get_sql_data("message_triggers", ["script"], {"discord_sid":int(scope.guild.id), "id":int(args.command)})
 			if not trigger:
 				await scope.shell.print_error(scope, "Message trigger #"+args.command+" not found. Please check existing message triggers with `message_triggers`.")
 				return
@@ -252,7 +252,7 @@ class TriggerPlugin(praxisbot.Plugin):
 		elif args.time:
 			self.ensure_object_id("Time trigger ID", args.command)
 
-			trigger = scope.shell.get_sql_data("time_triggers", ["script"], {"discord_sid":int(scope.server.id), "id":int(args.command)})
+			trigger = scope.shell.get_sql_data("time_triggers", ["script"], {"discord_sid":int(scope.guild.id), "id":int(args.command)})
 			if not trigger:
 				await scope.shell.print_error(scope, "Time trigger #"+args.command+" not found. Please check existing time triggers with `time_triggers`.")
 				return
@@ -262,7 +262,7 @@ class TriggerPlugin(praxisbot.Plugin):
 			if args.command not in ["@join", "@leave", "@ban", "@unban"]:
 				self.ensure_object_name("Command name", args.command)
 
-			trigger = scope.shell.get_sql_data("triggers", ["script"], {"discord_sid":int(scope.server.id), "command":str(args.command)})
+			trigger = scope.shell.get_sql_data("triggers", ["script"], {"discord_sid":int(scope.guild.id), "command":str(args.command)})
 			if not trigger:
 				await scope.shell.print_error(scope, "Trigger `"+args.command+"` not found.")
 				return
@@ -290,12 +290,12 @@ class TriggerPlugin(praxisbot.Plugin):
 		if args.command not in ["@join", "@leave", "@ban", "@unban"]:
 			self.ensure_object_name("Command name", args.command)
 
-		trigger = scope.shell.get_sql_data("triggers", ["id"], {"discord_sid":int(scope.server.id), "command":str(args.command)})
+		trigger = scope.shell.get_sql_data("triggers", ["id"], {"discord_sid":int(scope.guild.id), "command":str(args.command)})
 		if trigger and not args.force:
 			await scope.shell.print_error(scope, "Trigger `"+args.command+"` already exists. Please use --force to replace it.")
 			return
 
-		scope.shell.set_sql_data("triggers", {"script": "\n".join(lines)}, {"discord_sid":int(scope.server.id), "command":str(args.command)})
+		scope.shell.set_sql_data("triggers", {"script": "\n".join(lines)}, {"discord_sid":int(scope.guild.id), "command":str(args.command)})
 		if trigger:
 			await scope.shell.print_success(scope, "Trigger `"+args.command+"` edited.")
 		else:
@@ -318,7 +318,7 @@ class TriggerPlugin(praxisbot.Plugin):
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT command FROM "+scope.shell.dbtable("triggers")+" WHERE discord_sid = ? ORDER BY command", [int(scope.server.id)]):
+			for row in c.execute("SELECT command FROM "+scope.shell.dbtable("triggers")+" WHERE discord_sid = ? ORDER BY command", [int(scope.guild.id)]):
 				if row[0].find("@") != 0:
 					await stream.send("\n - "+row[0])
 
@@ -359,7 +359,7 @@ class TriggerPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Missing script. Please write the script in the same message, just the line after the command. Ex.:```\ncreate_time_trigger \"2018-06-19 20:01:56\"\nsay \"Hi {{@user}}!\"\nsay \"How are you?\"```")
 			return
 
-		scope.shell.add_sql_data("time_triggers", {"discord_sid": int(scope.server.id), "script": script,  "start_time": start_time_utc.strftime("%Y-%m-%d %H:%M:%S"),  "num_iterations": num_iterations})
+		scope.shell.add_sql_data("time_triggers", {"discord_sid": int(scope.guild.id), "script": script,  "start_time": start_time_utc.strftime("%Y-%m-%d %H:%M:%S"),  "num_iterations": num_iterations})
 		await scope.shell.print_success(scope, "The script will be executed "+str(num_iterations)+" time at "+start_time.strftime("%Y-%m-%d %H:%M:%S")+".")
 
 	@praxisbot.command
@@ -378,7 +378,7 @@ class TriggerPlugin(praxisbot.Plugin):
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT id, script, start_time as 'start_time_ [timestamp]' FROM "+scope.shell.dbtable("time_triggers")+" WHERE discord_sid = ? ORDER BY start_time", [int(scope.server.id)]):
+			for row in c.execute("SELECT id, script, start_time as 'start_time_ [timestamp]' FROM "+scope.shell.dbtable("time_triggers")+" WHERE discord_sid = ? ORDER BY start_time", [int(scope.guild.id)]):
 				start_time = timezone('UTC').localize(row[2])
 				start_time = start_time.astimezone(timezone('Europe/Paris'))
 
@@ -407,7 +407,7 @@ class TriggerPlugin(praxisbot.Plugin):
 
 		script = "\n".join(lines)
 
-		scope.shell.add_sql_data("message_triggers", {"discord_sid": int(scope.server.id), "script": script,  "regex": str(args.regex)})
+		scope.shell.add_sql_data("message_triggers", {"discord_sid": int(scope.guild.id), "script": script,  "regex": str(args.regex)})
 
 		await scope.shell.print_success(scope, "Message trigger created.")
 
@@ -427,7 +427,7 @@ class TriggerPlugin(praxisbot.Plugin):
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT id, script, regex FROM "+scope.shell.dbtable("message_triggers")+" WHERE discord_sid = ?", [int(scope.server.id)]):
+			for row in c.execute("SELECT id, script, regex FROM "+scope.shell.dbtable("message_triggers")+" WHERE discord_sid = ?", [int(scope.guild.id)]):
 
 				await stream.send("\n\n**:scroll: Message trigger #"+str(row[0])+":** `"+row[2]+"`\n```\n"+row[1]+"\n```")
 

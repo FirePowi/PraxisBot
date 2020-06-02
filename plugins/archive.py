@@ -42,20 +42,19 @@ class ArchivePlugin(praxisbot.Plugin):
 		self.add_command("archive_all", self.execute_archive_all)
 
 	def archive_message(self, m):
-		text = m.author.name+"#"+m.author.discriminator+" - "+str(m.timestamp)+" - (message: "+m.id+", author: "+m.author.id+")"
-		text = text+"\n"+m.content
+		text = "{}#{} – {} – (message: {}, author: {})\n{}".format(m.author.name,m.author.discriminator,m.timestamp,m.id,m.author.id,m.content)
 		for a in m.attachments:
-			text = text+"\nAttachment: "+str(a)
+			text = text+"\nAttachment: {}".format(a)
 		for e in m.embeds:
-			text = text+"\nEmbed: "+str(e)
+			text = text+"\nEmbed: {}".format(e)
 		text = text+"\n\n"
 		return text
 
 	def generate_header(self, chan, title):
 		text = "***********************************************************"
-		text = text+"\n* Server: "+chan.server.name+" ("+chan.server.id+")"
-		text = text+"\n* Channel: "+chan.name+" ("+chan.id+")"
-		text = text+"\n* "+title
+		text = text+"\n* Server: {} ({})".format(chan.guild.name,chan.guild.id)
+		text = text+"\n* Channel: {} ({})".format(chan.name,chan.id)
+		text = text+"\n* {}".format(title)
 		text = text+"\n***********************************************************"
 		text = text+"\n\n"
 		return text

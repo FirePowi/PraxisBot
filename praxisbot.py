@@ -159,10 +159,10 @@ class ExecutionBlockFor:
 			self.cmds.append(commandline)
 
 class ExecutionScope:
-	def __init__(self, shell, server, prefixes):
+	def __init__(self, shell, guild, prefixes):
 		self.shell = shell
 		self.prefixes = prefixes
-		self.server = server
+		self.guild = guild
 		self.channel = None
 		self.user = None
 
@@ -190,7 +190,7 @@ class ExecutionScope:
 			self.blocks.pop()
 
 	def create_subscope(self):
-		subScope = ExecutionScope(self.shell, self.server, self.prefixes)
+		subScope = ExecutionScope(self.shell, self.guild, self.prefixes)
 
 		subScope.channel = self.channel
 		subScope.user = self.user
@@ -240,7 +240,7 @@ class ExecutionScope:
 				subUser = user_chk.group(2).strip()
 				if subUser in self.vars:
 					subUser = self.vars[subUser].strip()
-				u = self.shell.find_member(subUser, self.server)
+				u = self.shell.find_member(subUser, self.guild)
 				tag = user_chk.group(1)
 
 			c = self.channel
@@ -249,7 +249,7 @@ class ExecutionScope:
 				subChan = channel_chk.group(2).strip()
 				if subChan in self.vars:
 					subChan = self.vars[subChan]
-				c = self.shell.find_channel(subChan, self.server)
+				c = self.shell.find_channel(subChan, self.guild)
 				tag = channel_chk.group(1)
 
 			r = None
@@ -258,13 +258,13 @@ class ExecutionScope:
 				subRole = role_chk.group(2).strip()
 				if subRole in self.vars:
 					subRole = self.vars[subRole]
-				r = self.shell.find_role(subRole, self.server)
+				r = self.shell.find_role(subRole, self.guild)
 				tag = role_chk.group(1)
 
-			if tag.lower() == "server" and self.server:
-				tagOutput = self.server.name
-			elif tag.lower() == "*server" and self.server:
-				tagOutput = self.server.id
+			if tag.lower() == "server" and self.guild:
+				tagOutput = self.guild.name
+			elif tag.lower() == "*server" and self.guild:
+				tagOutput = self.guild.id
 			elif tag.lower() == "n":
 				tagOutput = "\n"
 			elif tag.lower() == "now":
@@ -293,7 +293,7 @@ class ExecutionScope:
 			elif tag.lower() == "user_time" and u:
 				tagOutput = str(u.created_at)
 			elif tag.lower() == "user_avatar" and u:
-				tagOutput = str(u.avatar_url.replace(".webp", ".png"))
+				tagOutput = str(u.avatar_url_as(format="png"))
 			elif tag[0] == "*" and tag[1:] in self.vars:
 				if len(self.vars[tag[1:]].strip()) == 0:
 					tagOutput = 0
@@ -324,41 +324,40 @@ class UserPermission:
 	Owner=3
 
 class Shell:
-	def __init__(self, client, client_human, dbprefix, dbcon):
+	def __init__(self, client, dbprefix, dbcon):
 		self.plugins = []
 		self.client = client
-		self.client_human = client_human
 		self.dbprefix = dbprefix
 		self.dbcon = dbcon
 
 	async def print_info(self, scope, msg):
 		if scope.verbose >= 2:
-			await self.client.send_message(scope.channel, msg)
+			await scope.channel.send(msg)
 		return
 
 	async def print_debug(self, scope, msg):
 		if scope.verbose >= 3:
-			await self.client.send_message(scope.channel, ":large_blue_circle: "+msg)
+			await scope.channel.send(":large_blue_circle: "+msg)
 		return
 
 	async def print_success(self, scope, msg):
 		if scope.verbose >= 2:
-			await self.client.send_message(scope.channel, ":white_check_mark: "+msg)
+			await scope.channel.send(":white_check_mark: "+msg)
 		return
 
 	async def print_permission(self, scope, msg):
 		if scope.verbose >= 1:
-			await self.client.send_message(scope.channel, ":closed_lock_with_key: "+msg)
+			await scope.channel.send(":closed_lock_with_key: "+msg)
 		return
 
 	async def print_error(self, scope, msg):
 		if scope.verbose >= 1:
-			await self.client.send_message(scope.channel, ":no_entry: "+msg)
+			await scope.channel.send(":no_entry: "+msg)
 		return
 
 	async def print_fatal(self, scope, msg):
 		if scope.verbose >= 1:
-			await self.client.send_message(scope.channel, ":skull_crossbones: "+msg)
+			await scope.channel.send(":skull_crossbones: "+msg)
 		return
 
 	def load_plugin(self, plugin):
@@ -390,7 +389,7 @@ class Shell:
 
 		with self.dbcon:
 			c = self.dbcon.cursor()
-			for row in c.execute("SELECT name, value FROM "+self.dbtable("variables")+" WHERE discord_sid = ?", [int(scope.server.id)]):
+			for row in c.execute("SELECT name, value FROM "+self.dbtable("variables")+" WHERE discord_sid = ?", [int(scope.guild.id)]):
 				scope.vars[row[0]] = row[1]
 
 		return scope
@@ -461,14 +460,14 @@ class Shell:
 			if scope.abort:
 				break
 
-	async def send_message(self, channel, text, e=None):
+	async def send(self, channel, text, e=None):
 		if e:
-			return await self.client.send_message(channel, text, embed=e)
+			return await self.client.send(channel, text, embed=e)
 		else:
-			return await self.client.send_message(channel, text)
+			return await self.client.send(channel, text)
 
 	def find_server(self, server_name):
-		for s in self.client.servers:
+		for s in self.client.guilds:
 			if s.id == server_name:
 				return s
 		return None
@@ -484,9 +483,9 @@ class Shell:
 				return c
 			elif c.id == chan_name:
 				return c
-			elif "<#"+c.id+">" == chan_name:
+			elif "<#{}>".format(c.id) == chan_name:
 				return c
-			elif "#"+c.id == chan_name:
+			elif "#{}".format(c.id) == chan_name:
 				return c
 		return None
 
@@ -497,9 +496,9 @@ class Shell:
 		member_name = member_name.strip()
 
 		for m in server.members:
-			if "<@"+m.id+">" == member_name:
+			if "<@{}>".format(m.id) == member_name:
 				return m
-			if "<@!"+m.id+">" == member_name:
+			if "<@!{}>".format(m.id) == member_name:
 				return m
 			elif m.name+"#"+m.discriminator == member_name:
 				return m
@@ -513,7 +512,7 @@ class Shell:
 			return None
 
 		for r in server.roles:
-			if "<@&"+r.id+">" == role_name:
+			if "<@&{}>".format(r.id) == role_name:
 				return r
 			elif r.id == role_name:
 				return r
@@ -572,7 +571,7 @@ class Shell:
 				roles.append(r)
 				rolesAdded.append(r)
 
-		await self.client.replace_roles(member, *roles)
+		await member.edit(roles=roles)
 		return (rolesAdded, rolesRemoved)
 
 	def dbtable(self, name):
@@ -823,7 +822,7 @@ class MessageStream:
 	async def flush(self):
 		if self.monospace:
 			self.text = self.text+"\n```"
-		await self.scope.shell.client.send_message(self.scope.channel, self.text)
+		await self.scope.channel.send(self.text)
 		if self.monospace:
 			self.text = "```\n"
 		else:

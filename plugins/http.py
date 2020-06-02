@@ -68,12 +68,12 @@ class HTTPPlugin(praxisbot.Plugin):
 
 		self.ensure_object_name("Cookie ID", args.id)
 
-		cookieID = scope.shell.get_sql_data("cookies", ["id"], {"discord_sid": int(scope.server.id), "nameid": str(args.id)})
+		cookieID = scope.shell.get_sql_data("cookies", ["id"], {"discord_sid": int(scope.guild.id), "nameid": str(args.id)})
 		if cookieID:
 			await scope.shell.print_error(scope, "The cookie `"+str(args.id)+"` already exists.")
 			return
 
-		scope.shell.set_sql_data("cookies", {"name": str(args.name), "content": str("\n".join(lines)), "filter": str(args.filter)}, {"discord_sid": int(scope.server.id), "nameid": str(args.id)})
+		scope.shell.set_sql_data("cookies", {"name": str(args.name), "content": str("\n".join(lines)), "filter": str(args.filter)}, {"discord_sid": int(scope.guild.id), "nameid": str(args.id)})
 		await scope.shell.print_success(scope, "Cookie `"+str(args.id)+"` added.")
 
 	@praxisbot.command
@@ -93,7 +93,7 @@ class HTTPPlugin(praxisbot.Plugin):
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT nameid, filter FROM "+scope.shell.dbtable("cookies")+" WHERE discord_sid = ? ORDER BY name", [int(scope.server.id)]):
+			for row in c.execute("SELECT nameid, filter FROM "+scope.shell.dbtable("cookies")+" WHERE discord_sid = ? ORDER BY name", [int(scope.guild.id)]):
 				await stream.send("\n - "+row[0]+": `"+row[1]+"`")
 
 		await stream.finish()
@@ -145,7 +145,7 @@ class HTTPPlugin(praxisbot.Plugin):
 		result = None
 		cookies = {}
 		if args.cookie:
-			cookieData = scope.shell.get_sql_data("cookies", ["name", "content", "filter"], {"discord_sid": int(scope.server.id), "nameid": str(args.cookie)})
+			cookieData = scope.shell.get_sql_data("cookies", ["name", "content", "filter"], {"discord_sid": int(scope.guild.id), "nameid": str(args.cookie)})
 			if not cookieData:
 				await scope.shell.print_error(scope, "Cookie `"+args.cookie+"` not found.")
 				return

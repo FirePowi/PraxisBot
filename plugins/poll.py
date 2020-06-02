@@ -60,9 +60,9 @@ class PollPlugin(praxisbot.Plugin):
 		with scope.shell.dbcon:
 			c0 = scope.shell.dbcon.cursor()
 			c1 = scope.shell.dbcon.cursor()
-			for poll in c0.execute("SELECT id, discord_cid, discord_mid, description, end_time as 'end_time_ [timestamp]', type FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ?", [int(scope.server.id)]):
+			for poll in c0.execute("SELECT id, discord_cid, discord_mid, description, end_time as 'end_time_ [timestamp]', type FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ?", [int(scope.guild.id)]):
 				try:
-					chan = scope.shell.find_channel(str(poll[1]), scope.server)
+					chan = scope.shell.find_channel(str(poll[1]), scope.guild)
 					msg = None
 					if chan:
 						try:
@@ -115,17 +115,17 @@ class PollPlugin(praxisbot.Plugin):
 										vote = scope.shell.get_sql_data("votes", ["id", "choice"], {"poll": poll[0], "discord_uid": int(ru.id)})
 										if not vote:
 											scope.shell.add_sql_data("votes", {"poll": poll[0], "discord_uid": int(ru.id), "choice":current_choice, "vote_time":str(vote_time)})
-											await scope.shell.client.send_message(ru, "Your vote on the server \""+scope.server.name+"\" is confirmed.\n - Vote added: "+choices[current_choice])
+											await ru.send("Your vote on the server \""+scope.guild.name+"\" is confirmed.\n - Vote added: "+choices[current_choice])
 											changes = True
 										elif choices[current_choice] != choices[vote[1]]:
 											scope.shell.update_sql_data("votes", {"choice":current_choice}, {"id": vote[0]})
-											await scope.shell.client.send_message(ru, "Your vote on the server \""+scope.server.name+"\" is confirmed.\n - Vote removed: "+choices[vote[1]]+"\n - Vote added: "+choices[current_choice])
+											await ru.send("Your vote on the server \""+scope.guild.name+"\" is confirmed.\n - Vote removed: "+choices[vote[1]]+"\n - Vote added: "+choices[current_choice])
 											changes = True
 										else:
-											await scope.shell.client.send_message(ru, "Your vote on the server \""+scope.server.name+"\" is confirmed.")
+											await ru.send("Your vote on the server \""+scope.guild.name+"\" is confirmed.")
 									except:
 										print(traceback.format_exc())
-										await scope.shell.client.send_message(ru, ":no_entry: Your vote on the server \""+scope.server.name+"\" was lost due to a technical problem.")
+										await ru.send(":no_entry: Your vote on the server \""+scope.guild.name+"\" was lost due to a technical problem.")
 
 						for c in choices:
 							if choices[c] not in reaction_already_added:
@@ -170,7 +170,7 @@ class PollPlugin(praxisbot.Plugin):
 			return
 
 		if args.channel:
-			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.server)
+			chan = scope.shell.find_channel(scope.format_text(args.channel).strip(), scope.guild)
 		else:
 			chan = scope.channel
 
@@ -224,7 +224,7 @@ class PollPlugin(praxisbot.Plugin):
 				text = text+"\n\n"+c["emoji"]+" : "+c["description"]
 			text = text+"\n\nVoters: "+str(0)
 
-		msg = await scope.shell.client.send_message(chan, text)
+		msg = await chan.send(text)
 
 		for c in choices:
 			try:
@@ -233,7 +233,7 @@ class PollPlugin(praxisbot.Plugin):
 				await scope.shell.print_error(scope, "\""+c["emoji"]+"\" is not a valid emoji.")
 				return
 
-		poll_id = scope.shell.add_sql_data("polls", {"discord_sid": int(msg.server.id), "discord_cid": int(chan.id), "discord_mid": int(msg.id), "description": description, "end_time": str(end_time), "type":int(poll_type)})
+		poll_id = scope.shell.add_sql_data("polls", {"discord_sid": int(msg.guild.id), "discord_cid": int(chan.id), "discord_mid": int(msg.id), "description": description, "end_time": str(end_time), "type":int(poll_type)})
 
 		for c in choices:
 			scope.shell.add_sql_data("poll_choices", {"poll": poll_id, "emoji": c["emoji"], "description": c["description"]})
@@ -252,14 +252,14 @@ class PollPlugin(praxisbot.Plugin):
 
 		self.ensure_object_id("Poll ID", args.poll)
 
-		poll = scope.shell.get_sql_data("polls", ["id"], {"discord_sid":int(scope.server.id), "id":int(args.poll)})
+		poll = scope.shell.get_sql_data("polls", ["id"], {"discord_sid":int(scope.guild.id), "id":int(args.poll)})
 		if not poll:
 			await scope.shell.print_error(scope, "Poll #"+args.poll+"not found.")
 			return
 
 		end_time = datetime.datetime.now(timezone('UTC'))
 
-		scope.shell.update_sql_data("polls", {"end_time":end_time.strftime("%Y-%m-%d %H:%M:%S")}, {"discord_sid":int(scope.server.id), "id":int(args.poll)})
+		scope.shell.update_sql_data("polls", {"end_time":end_time.strftime("%Y-%m-%d %H:%M:%S")}, {"discord_sid":int(scope.guild.id), "id":int(args.poll)})
 		await scope.shell.print_success(scope, "Poll closed.")
 
 	@praxisbot.command
@@ -279,8 +279,8 @@ class PollPlugin(praxisbot.Plugin):
 		with scope.shell.dbcon:
 			c0 = scope.shell.dbcon.cursor()
 			c1 = scope.shell.dbcon.cursor()
-			for row in c0.execute("SELECT id, description, discord_cid, end_time as 'end_time_ [timestamp]' FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ? ORDER BY end_time", [int(scope.server.id)]):
-				chan = scope.shell.find_channel(str(row[2]), scope.server)
+			for row in c0.execute("SELECT id, description, discord_cid, end_time as 'end_time_ [timestamp]' FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ? ORDER BY end_time", [int(scope.guild.id)]):
+				chan = scope.shell.find_channel(str(row[2]), scope.guild)
 				chan_name = "an unknown channel"
 				if chan:
 					chan_name = chan.mention

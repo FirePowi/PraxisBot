@@ -52,8 +52,8 @@ class RoleListPlugin(praxisbot.Plugin):
 	async def on_loop(self, scope):
 		roles = {}
 
-		for r in scope.server.roles:
-			if r.is_everyone:
+		for r in scope.guild.roles:
+			if r.is_default():
 				continue
 
 			roles[r.id] = {
@@ -68,7 +68,7 @@ class RoleListPlugin(praxisbot.Plugin):
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT discord_rid, type, autosync, autosort FROM "+scope.shell.dbtable("role_options")+" WHERE discord_sid = ?", [int(scope.server.id)]):
+			for row in c.execute("SELECT discord_rid, type, autosync, autosort FROM "+scope.shell.dbtable("role_options")+" WHERE discord_sid = ?", [int(scope.guild.id)]):
 				rid = str(row[0])
 				if rid in roles:
 					roles[rid]["type"] = row[1]
@@ -98,7 +98,7 @@ class RoleListPlugin(praxisbot.Plugin):
 
 			while i < len(sorted_subroles):
 				if sorted_subroles[i]["position"] != current_position:
-					await scope.shell.client.move_role(scope.server, sorted_subroles[i]["object"], current_position)
+					await scope.shell.client.move_role(scope.guild, sorted_subroles[i]["object"], current_position)
 					return #To only one modification each on_loop iteration
 				current_position = current_position-1
 				i = i+1
@@ -124,7 +124,7 @@ class RoleListPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		r = scope.shell.find_role(args.role, scope.server)
+		r = scope.shell.find_role(args.role, scope.guild)
 		if not r:
 			await scope.shell.print_error(scope, "Role `"+args.role+"` not found.")
 			return
@@ -157,7 +157,7 @@ class RoleListPlugin(praxisbot.Plugin):
 		autosort = 0
 		autosync = 0
 
-		options = scope.shell.get_sql_data("role_options", ["description", "type", "autosort", "autosync"], {"discord_sid": int(scope.server.id), "discord_rid":int(r.id)})
+		options = scope.shell.get_sql_data("role_options", ["description", "type", "autosort", "autosync"], {"discord_sid": int(scope.guild.id), "discord_rid":int(r.id)})
 		if options:
 			description = options[0]
 			type = options[1]
@@ -195,12 +195,12 @@ class RoleListPlugin(praxisbot.Plugin):
 
 		if len(edit_role_args) > 0:
 			try:
-				await scope.shell.client.edit_role(scope.server, r, **edit_role_args)
+				await scope.shell.client.edit_role(scope.guild, r, **edit_role_args)
 			except:
 				await scope.shell.print_error(scope, "The role "+r.name+" can't be edited.")
 				return
 
-		scope.shell.set_sql_data("role_options", {"description":description, "type":type, "autosort":autosort, "autosync":autosync}, {"discord_sid": int(scope.server.id), "discord_rid":int(r.id)})
+		scope.shell.set_sql_data("role_options", {"description":description, "type":type, "autosort":autosort, "autosync":autosync}, {"discord_sid": int(scope.guild.id), "discord_rid":int(r.id)})
 
 		await scope.shell.print_success(scope, "Role edited.")
 
@@ -216,13 +216,13 @@ class RoleListPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		role = scope.shell.find_role(args.role, scope.server)
+		role = scope.shell.find_role(args.role, scope.guild)
 		if not role:
 			await scope.shell.print_error(scope, "Role `"+args.role+"` not found.")
 			return
 
 		members = []
-		for m in scope.server.members:
+		for m in scope.guild.members:
 			for r in m.roles:
 				if r.id == role.id:
 					members.append(m.name+"#"+m.discriminator)
@@ -234,7 +234,7 @@ class RoleListPlugin(praxisbot.Plugin):
 		if role.colour.value != 0:
 			e.colour = role.colour
 
-		options = scope.shell.get_sql_data("role_options", ["description", "type", "autosort", "autosync"], {"discord_sid": int(scope.server.id), "discord_rid":int(role.id)})
+		options = scope.shell.get_sql_data("role_options", ["description", "type", "autosort", "autosync"], {"discord_sid": int(scope.guild.id), "discord_rid":int(role.id)})
 		if options:
 			e.description = options[0]
 
@@ -261,7 +261,7 @@ class RoleListPlugin(praxisbot.Plugin):
 		if role.permissions.mention_everyone:
 			e.add_field(name="Mention everyone", value=":loudspeaker: Yes")
 
-		await scope.shell.client.send_message(scope.channel, "", embed=e)
+		await scope.channel.send("", embed=e)
 
 	@praxisbot.command
 	async def execute_role_members(self, scope, command, options, lines, **kwargs):
@@ -275,7 +275,7 @@ class RoleListPlugin(praxisbot.Plugin):
 		if not args:
 			return
 
-		role = scope.shell.find_role(args.role, scope.server)
+		role = scope.shell.find_role(args.role, scope.guild)
 		if not role:
 			await scope.shell.print_error(scope, "Role `"+args.role+"` not found.")
 			return
@@ -284,7 +284,7 @@ class RoleListPlugin(praxisbot.Plugin):
 		await stream.send("__**Members of the role "+role.name+"**__\n")
 
 		members = []
-		for m in scope.server.members:
+		for m in scope.guild.members:
 			for r in m.roles:
 				if r.id == role.id:
 					members.append(m.name+"#"+m.discriminator)
@@ -309,7 +309,7 @@ class RoleListPlugin(praxisbot.Plugin):
 
 		roles = {}
 
-		for r in scope.server.roles:
+		for r in scope.guild.roles:
 			if r.is_everyone:
 				continue
 
@@ -327,14 +327,14 @@ class RoleListPlugin(praxisbot.Plugin):
 				"color":r.colour.value
 			}
 
-		for m in scope.server.members:
+		for m in scope.guild.members:
 			for r in m.roles:
 				if r.id in roles:
 					roles[r.id]["members"] = roles[r.id]["members"]+1
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT discord_rid, type, description, autosync, autosort FROM "+scope.shell.dbtable("role_options")+" WHERE discord_sid = ?", [int(scope.server.id)]):
+			for row in c.execute("SELECT discord_rid, type, description, autosync, autosort FROM "+scope.shell.dbtable("role_options")+" WHERE discord_sid = ?", [int(scope.guild.id)]):
 				rid = str(row[0])
 				if rid in roles:
 					roles[rid]["type"] = row[1]
