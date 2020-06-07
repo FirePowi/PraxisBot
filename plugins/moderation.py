@@ -82,8 +82,8 @@ class ModerationPlugin(praxisbot.Plugin):
 				if not row[4] or row[4] < 0:
 					res["ban_timelimit"] = 0
 				if not row[5] or row[5] < 0:
-					res["ban_prioritylimit"] = 0
-				if row[5] > res["priority"]:
+					res["ban_prioritylimit"] = res["priority"]-1
+				elif row[5] > res["priority"]:
 					res["ban_prioritylimit"] = res["priority"]
 				if row[6] and row[6] != 0:
 					res["purge"] = 1
@@ -93,11 +93,11 @@ class ModerationPlugin(praxisbot.Plugin):
 				if row[0] == ModLevelType.User:
 					if member.id == int(row[1]):
 						return res
-				if row[0] == ModLevelType.Role:
+				elif row[0] == ModLevelType.Role:
 					for r in member.roles:
 						if r.id == int(row[1]):
 							return res
-				if row[0] == ModLevelType.Channel:
+				elif row[0] == ModLevelType.Channel:
 					chan = self.shell.find_channel("<#{}>".format(row[1]),member.guild)
 					if chan and chan.permissions_for(member).send_messages:
 						return res
@@ -289,7 +289,7 @@ class ModerationPlugin(praxisbot.Plugin):
 
 		with scope.shell.dbcon:
 			c = scope.shell.dbcon.cursor()
-			for row in c.execute("SELECT name, priority, ban_timelimit, ban_prioritylimit, purge FROM {} WHERE discord.sid = {} ORDER BY priority DESC".format(scope.shell.dbtable("mod_levels"),scope.guild.id)):
+			for row in c.execute("SELECT name, priority, ban_timelimit, ban_prioritylimit, purge FROM {} WHERE discord_sid = {} ORDER BY priority DESC".format(scope.shell.dbtable("mod_levels"),scope.guild.id)):
 				await stream.send("\n:label: **"+row[0]+"**")
 				await stream.send("\n   - Priority: "+str(row[1]))
 				if not row[2] or row[2] < 0:
@@ -354,7 +354,7 @@ class ModerationPlugin(praxisbot.Plugin):
 		targetLevel = self.get_mod_level(u)
 
 		if targetLevel["priority"] > userLevel["ban_prioritylimit"]:
-			await scope.shell.print_error(scope, "You can't {} {} with your level. You're permission level is : {} and you should be > {}.".format(action_name,u.display_name,userLevel["ban_prioritylimit"],targetLevel["priority"]))
+			await scope.shell.print_error(scope, "You can't {} {} with your level. You're permission level is : {} and you should be > {}. You are using mod level : {}".format(action_name,u.display_name,userLevel["ban_prioritylimit"],targetLevel["priority"],userLevel["name"]))
 			return
 
 		banData = scope.shell.get_sql_data("ban_time", ["id", "last_time as 'last_time_ [timestamp]'"], {"discord_sid": scope.guild.id, "discord_uid": scope.user.id})

@@ -29,6 +29,112 @@ from pytz import timezone
 from dateutil.relativedelta import relativedelta
 import praxisbot
 from io import StringIO
+import asyncio
+
+class HelpMessage():
+	def __init__(self, guild, plugins):
+		self.emojis = ["0️⃣","1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣"]
+		self.home = "🏠"
+		self.arrows = ["◀","▶"]
+		self.guild = guild
+		self.plugins = plugins
+		
+		self.last = None
+		self.page = 0
+		self.message = ""
+		self.reactions = []
+		self.pageMax = 0
+		self.holdOn = True
+		self.taskAddReaction = None
+	
+	def reset(self):
+		self.last = None
+		self.page = 0
+		self.message = ""
+		self.reactions = []
+	
+	def set_plugins(self,plugins):
+		self.plugins = plugins
+		self.pageMax = int(len(plugins)/len(self.emojis))
+	
+	def get_page_from_reaction(self,reaction):
+		if reaction in self.arrows:
+			if reaction == self.arrows[0]:
+				self.page -= 1
+			else:
+				self.page += 1
+			return
+		
+		elif reaction in self.emojis:
+			self.page = self.plugins[self.emojis.index(reaction)]
+			
+		elif reaction == self.home:
+			self.page = 0
+		return self.page
+	
+	def menu(self):
+		nbPlugins = len(self.plugins)
+		perPage = len(self.emojis)
+		stillToShow = len(self.plugins) - perPage * self.page ## Page 1 == 16 - 10 * 0 = 16 || Page 2 == 16 - 10 * 1 = 6
+		
+		minX = self.page * perPage
+		maxX = minX + min(stillToShow,perPage)
+		lines = []
+		if self.page > 0:
+			self.reactions.append(self.arrows[0])
+			lines.append("‧{} Page précédente".format(self.arrows[0]))
+			
+		for i in range(minX,maxX):
+			line = "‧{} {}".format(self.emojis[i%perPage],self.plugins[i].name)
+			lines.append(line)		
+		self.reactions += self.emojis[:maxX-minX]	
+		
+		if self.page < self.pageMax:
+			self.reactions.append(self.arrows[1])
+			lines.append("‧{} Page suivant".format(self.arrows[1]))
+		
+		self.message = "Menu d’aide, page {}/{} :\n\n{}".format(self.page+1,self.pageMax+1,"\n".join(lines))
+	
+	def plugin(self):
+		p = self.page
+		self.message = "\n**{}**\n\n".format(p.name)
+		for c in p.cmds:
+			desc =	inspect.getdoc(p.cmds[c])
+			if desc:
+				self.message += " – `{}` : {}\n".format(c,desc)
+			else:
+				self.message += " - `{}`\n".format(c)
+		self.reactions = [self.home]
+		
+	async def add_reactions(self):
+		try:
+			for r in self.reactions:
+				await self.last.add_reaction(r)
+		except asyncio.CancelledError:
+			return
+		
+	async def print(self,channel=None):
+		if channel == None and not self.last:
+			return
+		elif channel == None:
+			channel = self.last.channel
+		
+		self.message = ""
+		self.reactions = []
+		
+		if type(self.page) == int:
+			self.menu()
+		else:
+			self.plugin()
+		if not self.last:
+			self.last = await channel.send(self.message)
+		else:
+			await self.last.clear_reactions()
+			await self.last.edit(content=self.message)
+		
+		if self.taskAddReaction:
+			self.taskAddReaction.cancel()
+		self.taskAddReaction = asyncio.create_task(self.add_reactions())
 
 class CorePlugin(praxisbot.Plugin):
 	"""
@@ -41,6 +147,9 @@ class CorePlugin(praxisbot.Plugin):
 		super().__init__(shell)
 
 		self.shell.create_sql_table("variables", ["id INTEGER PRIMARY KEY", "discord_sid INTEGER", "name TEXT", "value TEXT"])
+		self.helpMessages = {}
+		for g in shell.client.guilds:
+			self.helpMessages[g] = HelpMessage(g,None)
 
 		self.add_command("help", self.execute_help)
 		self.add_command("say", self.execute_say)
@@ -58,24 +167,34 @@ class CorePlugin(praxisbot.Plugin):
 		self.add_command("verbose", self.execute_verbose)
 		self.add_command("silent", self.execute_silent)
 		self.add_command("cite", self.execute_cite)
+		
+	async def on_reaction(self, scope, reaction):
+		helpMessage = self.helpMessages[scope.guild]
+		
+		if reaction.message.id != helpMessage.last.id:
+			print("Reaction added to another message : Waited in {}, got in {}".format(reaction.message.id,helpMessage.last.id))
+			return
 
+		if reaction.emoji not in helpMessage.reactions:
+			print("Reaction not in base")
+			return
+		
+		helpMessage.reactions = []
+		helpMessage.get_page_from_reaction(reaction.emoji)
+		print("Attempt to print page : {}".format(helpMessage.page))
+		await helpMessage.print()
+	
 	@praxisbot.command
 	async def execute_help(self, scope, command, options, lines, **kwargs):
 		"""
 		Help page of PraxisBot.
 		"""
-
-		stream = praxisbot.MessageStream(scope)
-		for p in scope.shell.plugins:
-			await stream.send("\n**"+p.name+"**\n\n")
-			for c in p.cmds:
-				desc =	inspect.getdoc(p.cmds[c])
-				if desc:
-					await stream.send(" - `"+c+"` : "+desc+"\n")
-				else:
-					await stream.send(" - `"+c+"`\n")
-
-		await stream.finish()
+		
+		helpMessage = self.helpMessages[scope.guild]
+		helpMessage.reset()
+		
+		helpMessage.set_plugins(scope.shell.plugins)
+		await helpMessage.print(scope.channel)
 
 	@praxisbot.command
 	async def execute_script(self, scope, command, options, lines, **kwargs):

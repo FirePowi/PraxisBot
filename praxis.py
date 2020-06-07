@@ -110,6 +110,8 @@ class PraxisBot(discord.Client):
 		print("Bot logged on as {0}".format(self.user))
 
 		self.load_all_plugins()
+		if self.mode == "testing":
+			await self.get_channel(461819232884097054).send("Je suis prêt")
 
 		if not self.loopstarted:
 			self.loopstarted = True

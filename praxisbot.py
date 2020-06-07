@@ -521,11 +521,11 @@ class Shell:
 
 		return None
 
-	def find_emoji(self, emoji_name, server):
+	def find_emoji(self, emoji_name, guild):
 		if not emoji_name:
 			return None
 
-		for e in server.emojis:
+		for e in guild.emojis:
 			if "<:{}:{}>".format(e.name,e.id) == emoji_name:
 				return e
 			elif e.id == emoji_name:
@@ -535,8 +535,8 @@ class Shell:
 
 		return None
 
-	def get_default_channel(self, server):
-		for c in server.channels:
+	def get_default_channel(self, guild):
+		for c in guild.channels:
 			if c.type == discord.ChannelType.text:
 				return c
 		return None
@@ -611,7 +611,7 @@ class Shell:
 	def set_sql_data(self, tablename, fields, where, id="id"):
 		idFound = self.get_sql_data(tablename, [id], where)
 		if idFound:
-			sqlQuery = "UPDATE {} ".format(self.dbtable)
+			sqlQuery = "UPDATE {} ".format(self.dbtable(tablename))
 			vars = []
 			first = True
 			for f in fields:
@@ -623,7 +623,7 @@ class Shell:
 				first = False
 			sqlQuery = sqlQuery+" WHERE {} = ?".format(id)
 			vars.append(idFound[0])
-
+			
 			self.dbcon.execute(sqlQuery, vars)
 		else:
 			sqlQuery = "INSERT INTO {} (".format(self.dbtable(tablename))
