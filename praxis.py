@@ -174,7 +174,7 @@ class PraxisBot(discord.Client):
 		scope.user = message.author
 		if message.author.id == message.guild.owner.id:
 			scope.permission = praxisbot.UserPermission.Owner
-		elif message.author.guild_permissions.administrator or message:
+		elif message.author.guild_permissions.administrator:
 			scope.permission = praxisbot.UserPermission.Admin
 
 		command_found = await self.shell.execute_command(scope, message.content)
@@ -184,8 +184,10 @@ class PraxisBot(discord.Client):
 
 		if command_found and scope.deletecmd:
 			try:
-				await self.shell.client.delete_message(message)
+				await message.delete()
 			except:
+				print("Attempt to delete command message failed")
+				raise discord.DiscordException()
 				pass
 
 

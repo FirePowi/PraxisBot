@@ -563,7 +563,7 @@ class ModerationPlugin(praxisbot.Plugin):
 			while message_left > 0 and newmessages:
 				newmessages = False
 				b = before
-				async for m in scope.shell.client.logs_from(scope.channel, limit=min(200, message_left), before=curr_before, after=curr_after):
+				async for m in scope.channel.history(limit=min(200, message_left), before=curr_before, after=curr_after):
 					message_left = message_left-1
 					if args.after:
 						curr_after = m
@@ -574,6 +574,6 @@ class ModerationPlugin(praxisbot.Plugin):
 						await self.shell.client.delete_message(m)
 		else:
 			try:
-				await scope.shell.client.purge_from(scope.channel, limit=n, check=check_function, after=after, before=before)
+				await scope.channel.purge(limit=n, check=check_function, after=after, before=before)
 			except:
 				await scope.shell.print_error(scope, "Purge failed. Please retry with the option --onebyone.")

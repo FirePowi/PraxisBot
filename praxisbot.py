@@ -104,6 +104,7 @@ def command(func):
 def permission_admin(func):
 	@wraps(func)
 	def wrapper(self, scope, command, options, lines, **kwargs):
+		print("Checking for admin permission. Scope permission = {} ; UserPermission.Admin = {}".format(scope.permission,UserPermission.Admin))
 		if scope.permission < UserPermission.Admin:
 			raise AdminPermissionError()
 		return func(self, scope, command, options, lines, **kwargs)
@@ -359,11 +360,18 @@ class Shell:
 		if scope.verbose >= 1:
 			await scope.channel.send(":skull_crossbones: {}".format(msg))
 		return
+	
+	def is_plugin_loaded(self, plugin):
+		if plugin in self.plugins:
+			return True
+		return False
 
 	def load_plugin(self, plugin):
 		"""
 		Create an instance of a plugin and register it
 		"""
+		if self.is_plugin_loaded(plugin):
+			print("Plugin {} already loaded".format(plugin.name))
 		try:
 			instance = plugin(self)
 			self.plugins.append(instance)
