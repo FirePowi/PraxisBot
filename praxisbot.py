@@ -362,8 +362,9 @@ class Shell:
 		return
 	
 	def is_plugin_loaded(self, plugin):
-		if plugin in self.plugins:
-			return True
+		for p in self.plugins:
+			if type(p) == plugin:
+				return True
 		return False
 
 	def load_plugin(self, plugin):

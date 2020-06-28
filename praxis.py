@@ -251,13 +251,13 @@ class PraxisBot(discord.Client):
 
 						if b.user.id == self.shell.client.user.id:
 							#Try to find the true author (user) in the reason
-							res = re.search("(.+#[0-9][0-9][0-9][0-9]) using ban command", b.reason)
+							res = re.search("(.+#[0-9][0-9][0-9][0-9]) using (pre)?ban command", b.reason)
 							if res:
-								u = self.shell.find_member(res.group(1), member.guild)
+								u = self.shell.find_member(res.group(1), guild) or await self.shell.fetch_user(res.group(1))
 								if u:
 									user = u
 
-							res = re.search("using ban command:(.+)", b.reason)
+							res = re.search("using (pre)?ban command:(.+)", b.reason)
 							if res:
 								reason = res.group(1).strip()
 
@@ -271,9 +271,9 @@ class PraxisBot(discord.Client):
 			pass
 
 		try:
-			scope = self.shell.create_scope(member.guild, [""])
-			scope.channel = self.shell.get_default_channel(member.guild)
-			scope.user = member.guild.me
+			scope = self.shell.create_scope(guild, [""])
+			scope.channel = self.shell.get_default_channel(guild)
+			scope.user = guild.me
 			scope.permission = praxisbot.UserPermission.Script
 			scope.vars["reason"] = ban_reason
 			scope.vars["user"] = ban_user

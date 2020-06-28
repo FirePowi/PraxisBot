@@ -48,6 +48,7 @@ class ModerationPlugin(praxisbot.Plugin):
 		self.shell.create_sql_table("ban_time", ["id INTEGER PRIMARY KEY", "discord_sid INTEGER", "discord_uid INTEGER", "last_time DATETIME"])
 
 		self.add_command("ban", self.execute_ban)
+		self.add_command("preban", self.execube_preban)
 		self.add_command("last_bans", self.execute_last_bans)
 		self.add_command("kick", self.execute_kick)
 		self.add_command("list_channels", self.execute_list_channels)
@@ -400,6 +401,65 @@ class ModerationPlugin(praxisbot.Plugin):
 
 		await self.execute_kick_or_ban(scope, command, options, lines, action_name="ban", **kwargs)
 
+	@praxisbot.command
+	async def execube_preban(self, scope, command, options, lines, **kwargs):
+		"""
+		Preban a user.
+		"""
+
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('user', help='Id of the user to preban.')
+		parser.add_argument('--reason', help='Reason for the preban.')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+		
+		u = await scope.shell.client.fetch_user(int(args.user))
+		
+		if not u:
+			await scope.shell.print_error(scope, "User not found.")
+			return
+
+		if scope.user.id == u.id:
+			await scope.shell.print_error(scope, "You can't preban yourself.")
+			return
+
+		userLevel = self.get_mod_level(scope.user)
+
+		if 0 > userLevel["ban_prioritylimit"]:
+			await scope.shell.print_error(scope, "You can't {} {} with your level. You're permission level is : {} and you should be > {}. You are using mod level : {}".format(action_name,u.display_name,userLevel["ban_prioritylimit"],0,userLevel["name"]))
+			return
+
+		banData = scope.shell.get_sql_data("ban_time", ["id", "last_time as 'last_time_ [timestamp]'"], {"discord_sid": scope.guild.id, "discord_uid": scope.user.id})
+		if banData:
+
+			last_time = timezone('UTC').localize(banData[1])
+			now_time = datetime.datetime.now(timezone('UTC'))
+
+			end_time = last_time + datetime.timedelta(hours=userLevel["ban_timelimit"])
+			if end_time > now_time:
+				await scope.shell.print_error(scope, "You already used your right to {} someone. Please wait until {}. I consider you part of ".format(action_name,end_time,userLevel["name"]))
+				return
+
+		try:
+			reason = scope.user.name+"#"+scope.user.discriminator+" using preban command"
+			if args.reason:
+				reason = reason+": "+args.reason
+			elif len(lines) > 0:
+				reason = reason+": "+"\n".join(lines)
+
+			await scope.guild.ban(u, delete_message_days=0, reason=reason)
+		except:
+			await scope.shell.print_error(scope, "You can't {} {} (please check that {} role is high enough).".format(action_name,u.display_name,scope.guild.me.name))
+			return
+
+		last_time = datetime.datetime.now(timezone('UTC'))
+
+		scope.shell.set_sql_data("ban_time", {"last_time": str(last_time)}, {"discord_sid": int(scope.guild.id), "discord_uid": scope.user.id})
+
+		await scope.shell.print_success(scope, ""+u.display_name+" banned.")
+		scope.deletecmd = True
+		
 	@praxisbot.command
 	async def execute_kick(self, scope, command, options, lines, **kwargs):
 		"""
