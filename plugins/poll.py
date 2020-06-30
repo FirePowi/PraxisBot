@@ -61,96 +61,92 @@ class PollPlugin(praxisbot.Plugin):
 			c0 = scope.shell.dbcon.cursor()
 			c1 = scope.shell.dbcon.cursor()
 			for poll in c0.execute("SELECT id, discord_cid, discord_mid, description, end_time as 'end_time_ [timestamp]', type FROM "+scope.shell.dbtable("polls")+" WHERE discord_sid = ?", [int(scope.guild.id)]):
-				try:
-					chan = scope.shell.find_channel(str(poll[1]), scope.guild)
-					msg = None
-					if chan:
-						try:
-							msg = await scope.shell.client.get_message(chan, str(poll[2]))
-						except:
-							pass
+				chan = scope.shell.find_channel(str(poll[1]), scope.guild)
+				msg = None
+				if chan:
+					try:
+						msg = await chan.fetch_message(int(poll[2]))
+					except:
+						pass
 
-					end_time = timezone('UTC').localize(poll[4])
-					end_time_readable = end_time.astimezone(timezone('Europe/Paris'))
-					current_time = datetime.datetime.now(timezone('UTC'))
-					if end_time < current_time:
-						if msg:
-							text = poll[3]+"\n\n**Results:**"
-							for choice in c1.execute("SELECT id, emoji FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [poll[0]]):
-								counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0], "choice": choice[0]})
-								text = text+"\n\n"+choice[1]+" : "+str(counter[0])
+				end_time = timezone('UTC').localize(poll[4])
+				end_time_readable = end_time.astimezone(timezone('Europe/Paris'))
+				current_time = datetime.datetime.now(timezone('UTC'))
+				if end_time < current_time:
+					if msg:
+						text = poll[3]+"\n\n**Results:**"
+						for choice in c1.execute("SELECT id, emoji FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [poll[0]]):
+							counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0], "choice": choice[0]})
+							text = text+"\n\n"+choice[1]+" : "+str(counter[0])
 
-							await scope.shell.client.edit_message(msg, text)
-							await scope.shell.client.clear_reactions(msg)
+						await msg.edit(content=text)
+						await msg.clear_reactions()
 
-						scope.shell.delete_sql_data("votes", {"poll": poll[0]})
-						scope.shell.delete_sql_data("poll_choices", {"poll": poll[0]})
-						scope.shell.delete_sql_data("polls", {"id": poll[0]})
+					scope.shell.delete_sql_data("votes", {"poll": poll[0]})
+					scope.shell.delete_sql_data("poll_choices", {"poll": poll[0]})
+					scope.shell.delete_sql_data("polls", {"id": poll[0]})
 
-					elif msg:
-						changes = False
-						choices = {}
-						reaction_already_added = []
+				elif msg:
+					changes = False
+					choices = {}
+					reaction_already_added = []
+
+					for choice in c1.execute("SELECT id, emoji, description FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [poll[0]]):
+						choices[choice[0]] = choice[1]
+
+					for r in msg.reactions:
+						current_choice = None
+						for c in choices:
+							if self.check_emoji(r, choices[c]):
+								current_choice = c
+								break
+
+						async for ru in r.users():
+							if not current_choice:
+								await msg.remove_reaction(r.emoji, ru)
+							elif ru.id == scope.shell.client.user.id:
+								reaction_already_added.append(choices[current_choice])
+							else:
+								try:
+									await msg.remove_reaction(r.emoji, ru)
+									vote_time = datetime.datetime.now(timezone('UTC'))
+									vote = scope.shell.get_sql_data("votes", ["id", "choice"], {"poll": poll[0], "discord_uid": int(ru.id)})
+									if not vote:
+										scope.shell.add_sql_data("votes", {"poll": poll[0], "discord_uid": int(ru.id), "choice":current_choice, "vote_time":str(vote_time)})
+										await ru.send("Your vote on the server \"{}\" is confirmed.\n – Vote added: {}".format(scope.guild.name,choices[current_choice]))
+										changes = True
+									elif choices[current_choice] != choices[vote[1]]:
+										scope.shell.update_sql_data("votes", {"choice":current_choice}, {"id": vote[0]})
+										await ru.send("Your vote on the server \"{}\" is confirmed.\n – Vote removed: {}\n – Vote added: {}".format(scope.guild.name,choices[vote[1]],choices[current_choice]))
+										changes = True
+									else:
+										await ru.send("Your vote on the server \"{}\" is confirmed.".format(scope.guild.name))
+								except:
+									print(traceback.format_exc())
+									await ru.send(":no_entry: Your vote on the server \""+scope.guild.name+"\" was lost due to a technical problem.")
+
+					for c in choices:
+						if choices[c] not in reaction_already_added:
+							await msg.add_reaction(choices[c])
+
+					if changes:
+
+						text = poll[3]
+						if poll[5] != PollType.Short:
+							text = text+"\n\n**Poll closing at "+end_time_readable.strftime("%Y-%m-%d %H:%M:%S")+".\nTo vote, please click on one of the following reactions:**"
 
 						for choice in c1.execute("SELECT id, emoji, description FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [poll[0]]):
-							choices[choice[0]] = choice[1]
-
-						for r in msg.reactions:
-							current_choice = None
-							for c in choices:
-								if self.check_emoji(r, choices[c]):
-									current_choice = c
-									break
-
-							reaction_users = await scope.shell.client.get_reaction_users(r)
-							for ru in reaction_users:
-								if not current_choice:
-									await scope.shell.client.remove_reaction(msg, r.emoji, ru)
-								elif ru.id == scope.shell.client.user.id:
-									reaction_already_added.append(choices[current_choice])
-								else:
-									try:
-										await scope.shell.client.remove_reaction(msg, r.emoji, ru)
-										vote_time = datetime.datetime.now(timezone('UTC'))
-										vote = scope.shell.get_sql_data("votes", ["id", "choice"], {"poll": poll[0], "discord_uid": int(ru.id)})
-										if not vote:
-											scope.shell.add_sql_data("votes", {"poll": poll[0], "discord_uid": int(ru.id), "choice":current_choice, "vote_time":str(vote_time)})
-											await ru.send("Your vote on the server \""+scope.guild.name+"\" is confirmed.\n - Vote added: "+choices[current_choice])
-											changes = True
-										elif choices[current_choice] != choices[vote[1]]:
-											scope.shell.update_sql_data("votes", {"choice":current_choice}, {"id": vote[0]})
-											await ru.send("Your vote on the server \""+scope.guild.name+"\" is confirmed.\n - Vote removed: "+choices[vote[1]]+"\n - Vote added: "+choices[current_choice])
-											changes = True
-										else:
-											await ru.send("Your vote on the server \""+scope.guild.name+"\" is confirmed.")
-									except:
-										print(traceback.format_exc())
-										await ru.send(":no_entry: Your vote on the server \""+scope.guild.name+"\" was lost due to a technical problem.")
-
-						for c in choices:
-							if choices[c] not in reaction_already_added:
-								await scope.shell.client.add_reaction(msg, choices[c])
-
-						if changes:
-
-							text = poll[3]
 							if poll[5] != PollType.Short:
-								text = text+"\n\n**Poll closing at "+end_time_readable.strftime("%Y-%m-%d %H:%M:%S")+".\nTo vote, please click on one of the following reactions:**"
+								text = text+"\n\n"+choice[1]+" : "+str(choice[2])
+							if poll[5] == PollType.Live:
+								counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0], "choice": choice[0]})
+								text = text+" ("+str(counter[0])+")"
 
-							for choice in c1.execute("SELECT id, emoji, description FROM "+scope.shell.dbtable("poll_choices")+" WHERE poll = ?", [poll[0]]):
-								if poll[5] != PollType.Short:
-									text = text+"\n\n"+choice[1]+" : "+str(choice[2])
-								if poll[5] == PollType.Live:
-									counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0], "choice": choice[0]})
-									text = text+" ("+str(counter[0])+")"
+						if poll[5] != PollType.Short:
+							counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0]})
+							text = text+"\n\nVoters: "+str(counter[0])
 
-							if poll[5] != PollType.Short:
-								counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0]})
-								text = text+"\n\nVoters: "+str(counter[0])
-
-							await scope.shell.client.edit_message(msg, text)
-				except:
-					pass
+						await msg.edit(content=text)
 
 	@praxisbot.command
 	async def execute_start_poll(self, scope, command, options, lines, **kwargs):
@@ -228,7 +224,7 @@ class PollPlugin(praxisbot.Plugin):
 
 		for c in choices:
 			try:
-				await scope.shell.client.add_reaction(msg, c["emoji"])
+				await msg.add_reaction(c["emoji"])
 			except:
 				await scope.shell.print_error(scope, "\""+c["emoji"]+"\" is not a valid emoji.")
 				return

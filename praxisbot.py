@@ -490,7 +490,7 @@ class Shell:
 		for c in server.channels:
 			if c.name == chan_name:
 				return c
-			elif c.id == chan_name:
+			elif str(c.id) == chan_name:
 				return c
 			elif "<#{}>".format(c.id) == chan_name:
 				return c
