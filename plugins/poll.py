@@ -1,7 +1,7 @@
 """
 
 Copyright (C) 2018 MonaIzquierda (mona.izquierda@gmail.com)
-Copyright (C) 2020 powi (powi@powi.fr)
+Copyright (C) 2020 Powi (powi@powi.fr)
 
 This file is part of PraxisBot.
 
@@ -29,6 +29,7 @@ import io
 import sqlite3
 from pytz import timezone
 import praxisbot
+import asyncio
 
 class PollType:
 	Default=0
@@ -52,16 +53,52 @@ class PollPlugin(praxisbot.Plugin):
 		self.add_command("start_poll", self.execute_start_poll)
 		self.add_command("close_poll", self.execute_close_poll)
 		self.add_command("polls", self.execute_polls)
+		
+		self.pollKillers = {}
 
 	def check_emoji(self, reaction, emoji):
 		e = str(reaction.emoji)
 		return e.startswith(emoji)
+		
+	async def poll_autokiller(self, scope, poll_id, time):
+		print("Je vais supprimer la poll {}_{} dans {} secondes".format(scope.guild.id,poll_id,time))
+		await asyncio.sleep(time)
+		await self.end_poll(scope,poll_id)
+		
+	async def end_poll(self, scope, poll_id):
+		poll = scope.shell.get_sql_data("polls", ["id","discord_cid", "discord_mid", "description"], {"discord_sid":int(scope.guild.id), "id":int(poll_id)})
+		chan = scope.shell.find_channel(str(poll[1]), scope.guild)
+		msg = None
+		if chan:
+			try:
+				msg = await chan.fetch_message(int(poll[2]))
+			except:
+				pass
+		if msg:
+			text = poll[3]+"\n\n**Results:**"
+			choices = scope.shell.get_sql_data("poll_choices",["id","emoji","description"], {"poll":poll[0]},True)
+			if choices:
+				for choice in choices: #c1.execute("SELECT id, emoji, description FROM {} WHERE poll = {}".format(scope.shell.dbtable("poll_choices"),poll[0])):
+					counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0], "choice": choice[0]})
+					text = text+"\n\n{} {} : {}".format(choice[1],choice[2],counter[0])
 
-	async def on_loop(self, scope):
+			await msg.edit(content=text)
+			await msg.clear_reactions()
+			
+		scope.shell.delete_sql_data("votes", {"poll": poll[0]})
+		scope.shell.delete_sql_data("poll_choices", {"poll": poll[0]})
+		scope.shell.delete_sql_data("polls", {"id": poll[0]})
+		key = "{}_{}".format(scope.guild.id,poll_id)
+		if key in self.pollKillers.keys():
+			self.pollKillers.pop(key)
+		
+	async def on_reaction(self, scope, reaction=None):
 		with scope.shell.dbcon:
 			c0 = scope.shell.dbcon.cursor() #prepare for first request (from polls)
 			c1 = scope.shell.dbcon.cursor() #prepare for second request (from poll_choices)
 			for poll in c0.execute("SELECT id, discord_cid, discord_mid, description, end_time as 'end_time_ [timestamp]', type FROM {} WHERE discord_sid = {}".format(scope.shell.dbtable("polls"),scope.guild.id)):
+				if reaction:
+					print("discord_mid = {} ; reaction.message.id = {} ; both == {}".format(poll[2],reaction.message.id,poll[2]==reaction.message.id))
 				chan = scope.shell.find_channel(str(poll[1]), scope.guild)
 				msg = None
 				if chan:
@@ -69,25 +106,7 @@ class PollPlugin(praxisbot.Plugin):
 						msg = await chan.fetch_message(int(poll[2]))
 					except:
 						pass
-
-				end_time = timezone('UTC').localize(poll[4])
-				end_time_readable = end_time.astimezone(timezone('Europe/Paris'))
-				current_time = datetime.datetime.now(timezone('UTC'))
-				if current_time > end_time:
-					if msg:
-						text = poll[3]+"\n\n**Results:**"
-						for choice in c1.execute("SELECT id, emoji, description FROM {} WHERE poll = {}".format(scope.shell.dbtable("poll_choices"),poll[0])):
-							counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0], "choice": choice[0]})
-							text = text+"\n\n{} {} : {}".format(choice[1],choice[2],counter[0])
-
-						await msg.edit(content=text)
-						await msg.clear_reactions()
-
-					scope.shell.delete_sql_data("votes", {"poll": poll[0]})
-					scope.shell.delete_sql_data("poll_choices", {"poll": poll[0]})
-					scope.shell.delete_sql_data("polls", {"id": poll[0]})
-
-				elif msg:
+				if msg:
 					changes = False
 					choices = {}
 					reaction_already_added = []
@@ -154,6 +173,37 @@ class PollPlugin(praxisbot.Plugin):
 							text = text+"\n\nVoters: {}".format(counter[0])
 
 						await msg.edit(content=text)
+	
+	async def on_ready(self, scope):
+		print("Poll plugin getting ready")
+		polls = scope.shell.get_sql_data("polls",["id","discord_cid","discord_mid","description","end_time as 'end_time_ [timestamp]'","type"],{"discord_sid":scope.guild.id},True)
+		print("Il y a {} polls dans la guilde {}".format(len(polls),scope.guild.id))
+		for poll in polls:
+			print("Poll suivante {}".format(poll))
+			chan = scope.shell.find_channel(poll[1], scope.guild)
+			print("Je viens de chercher le salon")
+			msg = None
+			if chan:
+				try:
+					print("Je suis dans un salon : {}".format(chan.name))
+					msg = await chan.fetch_message(int(poll[2]))
+				except:
+					pass
+
+			end_time = timezone('UTC').localize(poll[4])
+			end_time_readable = end_time.astimezone(timezone('Europe/Paris'))
+			current_time = datetime.datetime.now(timezone('UTC'))
+			task_key = "{}_{}".format(scope.guild.id,poll[0])
+			if current_time > end_time:
+				print("Je dois terminé la poll {}_{}".format(scope.guild.id,poll[0]))
+				await self.end_poll(scope, poll[0])
+			elif not task_key in self.pollKillers.keys():
+				remaining_time = end_time - current_time
+				remaining_seconds = int(remaining_time.total_seconds())
+				print("Dans {} secondes, la poll {}_{} doit mourir.".format(remaining_seconds,scope.guild.id,poll[0]))
+				self.pollKillers[task_key] = asyncio.create_task(self.poll_autokiller(scope,poll[0],remaining_seconds))
+			else:
+				print("Tout est en ordre")
 
 	@praxisbot.command
 	async def execute_start_poll(self, scope, command, options, lines, **kwargs):
@@ -220,7 +270,8 @@ class PollPlugin(praxisbot.Plugin):
 		else:
 			description = scope.format_text("\n".join(lines))
 
-		end_time = datetime.datetime.now(timezone('UTC')) + datetime.timedelta(hours=duration)
+		current_time = datetime.datetime.now(timezone('UTC'))
+		end_time = current_time + datetime.timedelta(hours=duration)
 		end_time_readable = end_time.astimezone(timezone('Europe/Paris'))
 
 		text = description
@@ -231,6 +282,7 @@ class PollPlugin(praxisbot.Plugin):
 			text = text+"\n\nVoters: 0"
 
 		msg = await chan.send(text)
+		
 
 		for c in choices:
 			try:
@@ -240,6 +292,10 @@ class PollPlugin(praxisbot.Plugin):
 				return
 
 		poll_id = scope.shell.add_sql_data("polls", {"discord_sid": int(msg.guild.id), "discord_cid": int(chan.id), "discord_mid": int(msg.id), "description": description, "end_time": str(end_time), "type":int(poll_type)})
+		remaining_time = end_time - current_time
+		remaining_seconds = int(remaining_time.total_seconds())
+		task_key = "{}_{}".format(scope.guild.id,poll_id)
+		asyncio.create_task(self.poll_autokiller(scope,poll_id,remaining_seconds))
 
 		for c in choices:
 			scope.shell.add_sql_data("poll_choices", {"poll": poll_id, "emoji": c["emoji"], "description": c["description"]})
@@ -263,9 +319,7 @@ class PollPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "Poll #"+args.poll+"not found.")
 			return
 
-		end_time = datetime.datetime.now(timezone('UTC'))
-
-		scope.shell.update_sql_data("polls", {"end_time":end_time.strftime("%Y-%m-%d %H:%M:%S")}, {"discord_sid":int(scope.guild.id), "id":int(args.poll)})
+		await self.end_poll(scope, poll[0])
 		await scope.shell.print_success(scope, "Poll closed.")
 
 	@praxisbot.command

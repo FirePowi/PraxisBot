@@ -116,6 +116,18 @@ class PraxisBot(discord.Client):
 		if not self.loopstarted:
 			self.loopstarted = True
 			prevTime = time.time()
+			for p in self.shell.plugins:
+				for g in self.guilds:
+					scope = self.shell.create_scope(g, [""])
+					scope.channel = self.shell.get_default_channel(g)
+					scope.user = g.me
+					scope.permission = praxisbot.UserPermission.Script
+					
+					try:
+						await p.on_ready(scope)
+					except:
+						pass
+
 			while True:
 				currTime = time.time()
 				sleepDuration = 5 - (currTime - prevTime)
@@ -135,7 +147,7 @@ class PraxisBot(discord.Client):
 						except:
 							print(traceback.format_exc())
 							pass
-
+							
 	async def on_reaction_add(self, reaction, user):
 		if type(reaction.message.channel) == discord.DMChannel:
 			return

@@ -408,13 +408,15 @@ class ModerationPlugin(praxisbot.Plugin):
 		"""
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
-		parser.add_argument('user', help='Id of the user to preban.')
+		parser.add_argument('utes_id', help='Id of the user to preban.')
 		parser.add_argument('--reason', help='Reason for the preban.')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
-		
-		u = await scope.shell.client.fetch_user(int(args.user))
+		try:
+			u = await scope.shell.client.fetch_user(int(args.user))
+		except ValueError:
+			await scope.shell.print_error(scope, "You should give the user ID only.")
 		
 		if not u:
 			await scope.shell.print_error(scope, "User not found.")

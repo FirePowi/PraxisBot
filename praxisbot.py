@@ -104,7 +104,6 @@ def command(func):
 def permission_admin(func):
 	@wraps(func)
 	def wrapper(self, scope, command, options, lines, **kwargs):
-		print("Checking for admin permission. Scope permission = {} ; UserPermission.Admin = {}".format(scope.permission,UserPermission.Admin))
 		if scope.permission < UserPermission.Admin:
 			raise AdminPermissionError()
 		return func(self, scope, command, options, lines, **kwargs)
@@ -484,9 +483,8 @@ class Shell:
 	def find_channel(self, chan_name, server):
 		if not chan_name:
 			return None
-
-		chan_name = chan_name.strip()
-
+		print("searching for chan {}".format(chan_name))
+		chan_name = str(chan_name).strip()
 		for c in server.channels:
 			if c.name == chan_name:
 				return c
@@ -496,6 +494,7 @@ class Shell:
 				return c
 			elif "#{}".format(c.id) == chan_name:
 				return c
+		print("No chan found")
 		return None
 
 	def find_member(self, member_name, server):
@@ -597,21 +596,23 @@ class Shell:
 			except sqlite3.OperationalError:
 				pass
 
-	def get_sql_data(self, tablename, fields, where):
+	def get_sql_data(self, tablename, fields, where, array=False):
 		sqlQuery = "SELECT {} FROM {} ".format(", ".join(fields),self.dbtable(tablename))
 		vars = []
-		first = True
+		wheres = []
 		for w in where:
-			if first:
-				sqlQuery = sqlQuery+" WHERE {} = ?".format(w)
-			else:
-				sqlQuery = sqlQuery+" AND {} = ?".format(w)
+			wheres.append("{} = ?".format(w))
 			vars.append(where[w])
-			first = False
+		if wheres:
+			sqlQuery+=" WHERE {}".format(" AND ".join(wheres))
 
 		c = self.dbcon.cursor()
-		c.execute(sqlQuery, vars)
-		r = c.fetchone()
+		print("REQUEST : {}; with {}".format(sqlQuery,vars))
+		datas = c.execute(sqlQuery,vars)
+		if array:
+			r = c.fetchall()
+		else:
+			r = c.fetchone()
 		if r:
 			return r
 
