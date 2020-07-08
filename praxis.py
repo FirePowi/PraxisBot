@@ -148,7 +148,17 @@ class PraxisBot(discord.Client):
 						except:
 							print(traceback.format_exc())
 							pass
-							
+	
+	async def on_raw_reaction_add(self, payload):
+		try:
+			chan = self.get_channel(payload.channel_id)
+			message = await chan.fetch_message(payload.message_id)
+			for r in message.reactions:
+				async for u in r.users():
+					await self.on_reaction_add(r,u)
+		except AttributeError:
+			pass
+		
 	async def on_reaction_add(self, reaction, user):
 		if type(reaction.message.channel) == discord.DMChannel:
 			return

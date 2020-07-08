@@ -93,8 +93,10 @@ class PollPlugin(praxisbot.Plugin):
 			self.pollKillers.pop(key)
 		
 	async def on_reaction(self, scope, reaction=None):
+		print("Reaction")
 		with scope.shell.dbcon:
 			if reaction:
+				print("Reaction added on a message : {}".format(reaction.message.id))
 				polls = scope.shell.get_sql_data("polls",["id","discord_cid","discord_mid","description","end_time as 'end_time_ [timestamp]'","type"],{"discord_sid":scope.guild.id,"discord_mid":reaction.message.id},True)
 			else:
 				polls = scope.shell.get_sql_data("polls",["id","discord_cid","discord_mid","description","end_time as 'end_time_ [timestamp]'","type"],{"discord_sid":scope.guild.id},True)
@@ -156,16 +158,19 @@ class PollPlugin(praxisbot.Plugin):
 									print(traceback.format_exc())
 									await ru.send(":no_entry: Your vote on the server \"{}\" was lost due to a technical issue.".format(scope.guild.name))
 
+					print("I'll add not already added reactions")
 					for c in choices:
 						if choices[c] not in reaction_already_added:
 							await msg.add_reaction(choices[c][0])
-
+							
 					if changes:
 						text = poll[3]
+						end_time_readable = poll[4].astimezone(timezone('Europe/Paris'))
+						print("Text :\n{}".format(text))
 						if poll[5] != PollType.Short:
 							text = text+"\n\n**Poll closing at {}.\nTo vote, please click on one of the following reactions:**".format(end_time_readable.strftime("%Y-%m-%d %H:%M:%S"))
 						
-						choices = self.shell.get_sql_data("poll_choices",["id","emoji","description"],{"poll":poll[0]})
+						choices = self.shell.get_sql_data("poll_choices",["id","emoji","description"],{"poll":poll[0]},True)
 						for choice in choices:
 							if poll[5] != PollType.Short:
 								text = text+"\n\n{} : {}".format(choice[1],choice[2])
@@ -176,7 +181,6 @@ class PollPlugin(praxisbot.Plugin):
 						if poll[5] != PollType.Short:
 							counter = scope.shell.get_sql_data("votes", ["COUNT(id)"], {"poll": poll[0]})
 							text = text+"\n\nVoters: {}".format(counter[0])
-
 						await msg.edit(content=text)
 	
 	async def on_ready(self, scope):
@@ -209,6 +213,8 @@ class PollPlugin(praxisbot.Plugin):
 				self.pollKillers[task_key] = asyncio.create_task(self.poll_autokiller(scope,poll[0],remaining_seconds))
 			else:
 				print("Tout est en ordre")
+			#await scope.guild.me.fetch_message(poll[2])
+		await self.on_reaction(scope)
 
 	@praxisbot.command
 	async def execute_start_poll(self, scope, command, options, lines, **kwargs):
