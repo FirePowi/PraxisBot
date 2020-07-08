@@ -1,6 +1,7 @@
 """
 
 Copyright (C) 2018 MonaIzquierda (mona.izquierda@gmail.com)
+Copyright (C) 2020 Powi (powi@powi.fr)
 
 This file is part of PraxisBot.
 
@@ -408,13 +409,13 @@ class ModerationPlugin(praxisbot.Plugin):
 		"""
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
-		parser.add_argument('utes_id', help='Id of the user to preban.')
+		parser.add_argument('user_id', help='Id of the user to preban.')
 		parser.add_argument('--reason', help='Reason for the preban.')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
 		try:
-			u = await scope.shell.client.fetch_user(int(args.user))
+			u = await scope.shell.client.fetch_user(int(args.user_id))
 		except ValueError:
 			await scope.shell.print_error(scope, "You should give the user ID only.")
 		

@@ -3,6 +3,7 @@
 """
 
 Copyright (C) 2018 MonaIzquierda (mona.izquierda@gmail.com)
+Copyright (C) 2020 Powi (powi@powi.fr)
 
 This file is part of PraxisBot.
 
@@ -268,10 +269,13 @@ class PraxisBot(discord.Client):
 								u = self.shell.find_member(res.group(1), guild) or await self.shell.fetch_user(res.group(1))
 								if u:
 									user = u
-
 							res = re.search("using (pre)?ban command:(.+)", b.reason)
 							if res:
-								reason = res.group(1).strip()
+								reason = res.group(2).strip()
+								if res.group(1):
+									reason += " (using preban command)."
+								else:
+									reason += " (using ban command)."
 
 						ban_user = "{}#{}".format(user.name,user.discriminator)
 						ban_reason = reason

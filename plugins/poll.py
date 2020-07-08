@@ -94,24 +94,29 @@ class PollPlugin(praxisbot.Plugin):
 		
 	async def on_reaction(self, scope, reaction=None):
 		with scope.shell.dbcon:
-			c0 = scope.shell.dbcon.cursor() #prepare for first request (from polls)
-			c1 = scope.shell.dbcon.cursor() #prepare for second request (from poll_choices)
-			for poll in c0.execute("SELECT id, discord_cid, discord_mid, description, end_time as 'end_time_ [timestamp]', type FROM {} WHERE discord_sid = {}".format(scope.shell.dbtable("polls"),scope.guild.id)):
+			if reaction:
+				polls = scope.shell.get_sql_data("polls",["id","discord_cid","discord_mid","description","end_time as 'end_time_ [timestamp]'","type"],{"discord_sid":scope.guild.id,"discord_mid":reaction.message.id},True)
+			else:
+				polls = scope.shell.get_sql_data("polls",["id","discord_cid","discord_mid","description","end_time as 'end_time_ [timestamp]'","type"],{"discord_sid":scope.guild.id},True)
+			for poll in polls:
 				if reaction:
-					print("discord_mid = {} ; reaction.message.id = {} ; both == {}".format(poll[2],reaction.message.id,poll[2]==reaction.message.id))
-				chan = scope.shell.find_channel(str(poll[1]), scope.guild)
-				msg = None
-				if chan:
-					try:
-						msg = await chan.fetch_message(int(poll[2]))
-					except:
-						pass
+					msg = reaction.message
+				else:
+					print("No Reaction !")
+					chan = scope.shell.find_channel(str(poll[1]), scope.guild)
+					msg = None
+					if chan:
+						try:
+							msg = await chan.fetch_message(int(poll[2]))
+						except:
+							pass
 				if msg:
 					changes = False
 					choices = {}
 					reaction_already_added = []
 					
-					for entry in c1.execute("SELECT id, emoji, description FROM {} WHERE poll = {}".format(scope.shell.dbtable("poll_choices"),poll[0])):
+					entries = scope.shell.get_sql_data("poll_choices",["id","emoji","description"],{"poll":poll[0]},True)
+					for entry in entries:
 						choices[entry[0]] = [entry[1],entry[2]]
 
 					for r in msg.reactions:
@@ -138,7 +143,7 @@ class PollPlugin(praxisbot.Plugin):
 										previous_choice_emoji = choices[vote[1]][0]
 										previous_choice_desc = choices[vote[1]][1]
 									if not vote: #Si c'est le premier vote de voter
-										scope.shell.add_sql_data("votes", {"poll": poll[0], "discord_uid": int(ru.id), "choice":choice_id, "vote_time":str(vote_time)})
+										scope.shell.add_sql_data("votes", {"poll": poll[0], "discord_uid": int(ru.id), "choice":choice_id})
 										await ru.send("Your vote on the server \"{}\" is confirmed.\n – Vote added: {} : {}".format(scope.guild.name,choice_emoji,choice_desc))
 										changes = True
 									elif choice_emoji != previous_choice_emoji: #Sinon si le vote est différent du précédent
@@ -156,12 +161,12 @@ class PollPlugin(praxisbot.Plugin):
 							await msg.add_reaction(choices[c][0])
 
 					if changes:
-
 						text = poll[3]
 						if poll[5] != PollType.Short:
-                                                    text = text+"\n\n**Poll closing at {}.\nTo vote, please click on one of the following reactions:**".format(end_time_readable.strftime("%Y-%m-%d %H:%M:%S"))
-
-						for choice in c1.execute("SELECT id, emoji, description FROM {} WHERE poll = {}".format(scope.shell.dbtable("poll_choices"),poll[0])):
+							text = text+"\n\n**Poll closing at {}.\nTo vote, please click on one of the following reactions:**".format(end_time_readable.strftime("%Y-%m-%d %H:%M:%S"))
+						
+						choices = self.shell.get_sql_data("poll_choices",["id","emoji","description"],{"poll":poll[0]})
+						for choice in choices:
 							if poll[5] != PollType.Short:
 								text = text+"\n\n{} : {}".format(choice[1],choice[2])
 							if poll[5] == PollType.Live:
@@ -245,7 +250,7 @@ class PollPlugin(praxisbot.Plugin):
 			poll_type = PollType.Short
 
 		duration = 24
-		if args.duration:
+		if args.duration and not args.duration == "test":
 			try:
 				duration = int(args.duration)
 				if duration > 128:
@@ -271,7 +276,10 @@ class PollPlugin(praxisbot.Plugin):
 			description = scope.format_text("\n".join(lines))
 
 		current_time = datetime.datetime.now(timezone('UTC'))
-		end_time = current_time + datetime.timedelta(hours=duration)
+		if args.duration == "test":
+			end_time = current_time + datetime.timedelta(seconds=10)
+		else:
+			end_time = current_time + datetime.timedelta(hours=duration)
 		end_time_readable = end_time.astimezone(timezone('Europe/Paris'))
 
 		text = description

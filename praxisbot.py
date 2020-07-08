@@ -1,6 +1,7 @@
 """
 
 Copyright (C) 2018 MonaIzquierda (mona.izquierda@gmail.com)
+Copyright (C) 2020 Powi (powi@powi.fr)
 
 This file is part of PraxisBot.
 
@@ -372,6 +373,7 @@ class Shell:
 		"""
 		if self.is_plugin_loaded(plugin):
 			print("Plugin {} already loaded".format(plugin.name))
+			return
 		try:
 			instance = plugin(self)
 			self.plugins.append(instance)
@@ -597,131 +599,59 @@ class Shell:
 				pass
 
 	def get_sql_data(self, tablename, fields, where, array=False):
-		sqlQuery = "SELECT {} FROM {} ".format(", ".join(fields),self.dbtable(tablename))
-		vars = []
-		wheres = []
-		for w in where:
-			wheres.append("{} = ?".format(w))
-			vars.append(where[w])
-		if wheres:
-			sqlQuery+=" WHERE {}".format(" AND ".join(wheres))
+		sqlQuery = "SELECT {} FROM {}".format(", ".join(fields),self.dbtable(tablename))
+		vars = list(where.values())
+		if where:
+			sqlQuery+=" WHERE {} = ?".format(" = ? AND ".join(where.keys()))
 
 		c = self.dbcon.cursor()
 		print("REQUEST : {}; with {}".format(sqlQuery,vars))
 		datas = c.execute(sqlQuery,vars)
-		if array:
-			r = c.fetchall()
-		else:
-			r = c.fetchone()
+		r = c.fetchall() if array else c.fetchone()
 		if r:
+			print("RÉSULTS : {}".format(r))
 			return r
 
 		return None
 
 	def set_sql_data(self, tablename, fields, where, id="id"):
 		idFound = self.get_sql_data(tablename, [id], where)
+		db = self.dbtable(tablename)
 		if idFound:
-			sqlQuery = "UPDATE {} ".format(self.dbtable(tablename))
-			vars = []
-			first = True
-			for f in fields:
-				if first:
-					sqlQuery = sqlQuery+" SET {} = ?".format(f)
-				else:
-					sqlQuery = sqlQuery+", {} = ?".format(f)
-				vars.append(fields[f])
-				first = False
-			sqlQuery = sqlQuery+" WHERE {} = ?".format(id)
-			vars.append(idFound[0])
-			
+			sqlQuery = "UPDATE {} SET {} = ? WHERE {} = ?".format(db," = ?".join(f.keys()),id)
+			vars = list(fields.values()) + idFound
+			print("REQUEST : {}; with {}".format(sqlQuery,vars))
 			self.dbcon.execute(sqlQuery, vars)
 		else:
-			sqlQuery = "INSERT INTO {} (".format(self.dbtable(tablename))
-			vars = []
-			first = True
-			for f in fields:
-				if not first:
-					sqlQuery = sqlQuery+", "
-				sqlQuery = sqlQuery+f
-				vars.append(fields[f])
-				first = False
-			for w in where:
-				if not first:
-					sqlQuery = sqlQuery+", "
-				sqlQuery = sqlQuery+w
-				vars.append(where[w])
-				first = False
-			sqlQuery = sqlQuery+") VALUES ("
-			first = True
-			for f in fields:
-				if not first:
-					sqlQuery = sqlQuery+", "
-				sqlQuery = sqlQuery+"?"
-				first = False
-			for w in where:
-				if not first:
-					sqlQuery = sqlQuery+", "
-				sqlQuery = sqlQuery+"?"
-				first = False
-			sqlQuery = sqlQuery+")"
-
+			fnw = list(fields)+list(where)
+			sqlQuery = "INSERT INTO {} ({}) VALUES ({})".format(db,", ".join(fnw),", ".join(["?"]*len(fnw)))
+			vars = list(fields.values()) + list(where.values())
+			print("REQUEST : {}; with {}".format(sqlQuery,vars))
 			self.dbcon.execute(sqlQuery, vars)
 
 	def update_sql_data(self, tablename, fields, where):
-		sqlQuery = "UPDATE "+self.dbtable(tablename)+" "
-		vars = []
+		db = self.dbtable(tablename)
+		sqlQuery = "UPDATE {} SET {} = ?".format(db, " = ?, ".join(fields.keys()))
+		vars = list(fields.values()) + list(where.values())
 		first = True
-		for f in fields:
-			if first:
-				sqlQuery = sqlQuery+" SET "+f+" = ?"
-			else:
-				sqlQuery = sqlQuery+", "+f+" = ?"
-			vars.append(fields[f])
-			first = False
-		first = True
-		for w in where:
-			if first:
-				sqlQuery = sqlQuery+" WHERE "+w+" = ?"
-			else:
-				sqlQuery = sqlQuery+" AND "+w+" = ?"
-			vars.append(where[w])
-			first = False
-
+		if where:
+			sqlQuery += " WHERE {} = ?".format(" = ? AND ".join(where))
+		print("REQUEST : {}; with {}".format(sqlQuery,vars))
 		self.dbcon.execute(sqlQuery, vars)
 
 	def add_sql_data(self, tablename, fields):
-		sqlQuery = "INSERT INTO "+self.dbtable(tablename)+" ("
-		vars = []
-		first = True
-		for f in fields:
-			if not first:
-				sqlQuery = sqlQuery+", "
-			sqlQuery = sqlQuery+f
-			vars.append(fields[f])
-			first = False
-		sqlQuery = sqlQuery+") VALUES ("
-		first = True
-		for f in fields:
-			if not first:
-				sqlQuery = sqlQuery+", "
-			sqlQuery = sqlQuery+"?"
-			first = False
-		sqlQuery = sqlQuery+")"
+		sqlQuery = "INSERT INTO {} ({}) VALUES ({})".format(self.dbtable(tablename),", ".join(fields.keys()),", ".join(["?"]*len(fields)))
+		vars = list(fields.values())
+		print("REQUEST : {}; with {}".format(sqlQuery,vars))
 		c = self.dbcon.cursor()
 		c.execute(sqlQuery, vars)
+		print("RESULT : {}".format(c.lastrowid))
 		return c.lastrowid
 
 	def delete_sql_data(self, tablename, where):
-		sqlQuery = "DELETE FROM "+self.dbtable(tablename)+" "
-		vars = []
-		first = True
-		for w in where:
-			if first:
-				sqlQuery = sqlQuery+" WHERE "+w+" = ?"
-			else:
-				sqlQuery = sqlQuery+" AND "+w+" = ?"
-			vars.append(where[w])
-			first = False
+		sqlQuery = "DELETE FROM {} WHERE {} = ?".format(self.dbtable(tablename)," = ? AND ".join(where.keys()))
+		vars = list(where.values())
+		print("REQUEST : {}; with {}".format(sqlQuery,vars))
 
 		self.dbcon.execute(sqlQuery, vars)
 
