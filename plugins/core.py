@@ -380,6 +380,7 @@ class CorePlugin(praxisbot.Plugin):
 		parser.add_argument('name', help='Variable name')
 		parser.add_argument('value', nargs='?', help='Variable value')
 		parser.add_argument('--global', dest='glob', action='store_true', help='Set the variable for all commands on this server')
+		parser.add_argument('--delete_global', dest='del_glob', action='store_true', help='Delete the variable for all commands on this server')
 		parser.add_argument('--session', action='store_true', help='Set the variable for an user session')
 		parser.add_argument('--dateadd', help='Add a duration to a date. YYYY-MM-DD HH:MM:SS')
 		parser.add_argument('--intadd', help='Add the integer value to the variable')
@@ -476,7 +477,7 @@ class CorePlugin(praxisbot.Plugin):
 			for m in scope.guild.members:
 				if len(role_list) > 0:
 					for r in m.roles:
-						if not r.is_everyone and r in role_list:
+						if not r.is_default() and r in role_list:
 							member_list.append(m.name+"#"+m.discriminator)
 							break
 				elif not error:
@@ -495,8 +496,12 @@ class CorePlugin(praxisbot.Plugin):
 
 		if args.glob:
 			scope.shell.set_sql_data("variables", {"value":str(val)}, {"discord_sid": int(scope.guild.id), "name": str(var)})
+		elif args.del_glob:
+			scope.shell.delete_sql_data("variables", {"discord_sid": int(scope.guild.id), "name": str(var)})
+			await scope.shell.print_success(scope, "{} is now deleted".format(var))
+			return
 
-		await scope.shell.print_success(scope, "`"+str(var)+"` is now equal to:\n```\n"+str(val)+"```")
+		await scope.shell.print_success(scope, "`{}` is now equal to:\n```\n{}```".format(var,val))
 
 
 	@praxisbot.command

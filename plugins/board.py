@@ -1,6 +1,7 @@
 """
 
 Copyright (C) 2018 MonaIzquierda (mona.izquierda@gmail.com)
+Copyright (C) 2020 Powi (powi@powi.fr)
 
 This file is part of PraxisBot.
 
@@ -49,7 +50,7 @@ class BoardPlugin(praxisbot.Plugin):
 	def create_embed(self, boardname, author):
 		e = discord.Embed();
 		e.type = "rich"
-		e.set_footer(text="Last modification by "+author.display_name+". Use `edit_board "+boardname+"` to edit this board.")
+		e.set_footer(text="Last modification by {}. Use `edit_board {}` to edit this board.".format(author.display_name,boardname))
 		return e
 
 	@praxisbot.command
@@ -119,7 +120,7 @@ class BoardPlugin(praxisbot.Plugin):
 
 		board = scope.shell.get_sql_data("boards", ["id", "discord_cid", "discord_mid"], {"discord_sid": int(scope.guild.id), "name": str(boardname)})
 		if not board:
-			await scope.shell.print_error(scope, "Board `"+boardname+"` not found.")
+			await scope.shell.print_error(scope, "Board `{}` not found.".format(boardname))
 			return
 
 		chan = scope.shell.find_channel(str(board[1]), scope.guild)
@@ -129,7 +130,7 @@ class BoardPlugin(praxisbot.Plugin):
 
 		scope.shell.delete_sql_data("boards", {"id": board[0]})
 
-		await scope.shell.print_success(scope, "Board `"+boardname+"` deleted.")
+		await scope.shell.print_success(scope, "Board `{}` deleted.".format(boardname))
 
 	@praxisbot.command
 	async def execute_edit_board(self, scope, command, options, lines, **kwargs):
@@ -163,7 +164,7 @@ class BoardPlugin(praxisbot.Plugin):
 
 		m = None
 		try:
-			m = await scope.shell.client.get_message(chan, str(board[2]))
+			m = await chan.fetch_message(int(board[2]))
 		except:
 			pass
 		if not m:
@@ -181,7 +182,7 @@ class BoardPlugin(praxisbot.Plugin):
 			content = scope.format_text(content)
 
 		e = self.create_embed(boardname, scope.user);
-		await scope.shell.client.edit_message(m, content, embed=e)
+		await m.edit(content=content, embed=e)
 
 		await scope.shell.print_success(scope, "Board `"+boardname+"` edited.")
 
@@ -215,7 +216,7 @@ class BoardPlugin(praxisbot.Plugin):
 
 		m = None
 		try:
-			m = await scope.shell.client.get_message(chan, str(board[2]))
+			m = await chan.fetch_message(int(board[2]))
 		except:
 			pass
 		if not m:

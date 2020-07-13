@@ -1,6 +1,7 @@
 """
 
 Copyright (C) 2018 MonaIzquierda (mona.izquierda@gmail.com)
+Copyright (C) 2020 Powi (powi@powi.fr)
 
 This file is part of PraxisBot.
 

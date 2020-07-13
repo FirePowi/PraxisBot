@@ -246,14 +246,14 @@ class RoleListPlugin(praxisbot.Plugin):
 
 		if role.permissions.administrator:
 			e.add_field(name="Administrator", value=":crown: Yes")
-		if role.permissions.manage_server:
-			e.add_field(name="Manage server", value=":tools: Yes")
+		if role.permissions.manage_guild:
+			e.add_field(name="Manage guild", value=":tools: Yes")
 		if role.permissions.manage_channels:
 			e.add_field(name="Manage channels", value=":tools: Yes")
 		if role.permissions.manage_messages:
 			e.add_field(name="Manage messages", value=":speech_balloon: Yes")
-		if role.permissions.view_audit_logs:
-			e.add_field(name="View audit logs", value=":eye: Yes")
+		if role.permissions.view_audit_log:
+			e.add_field(name="View audit log", value=":eye: Yes")
 		if role.permissions.ban_members:
 			e.add_field(name="Ban members", value=":punch: Yes")
 		if role.permissions.kick_members:
@@ -310,7 +310,7 @@ class RoleListPlugin(praxisbot.Plugin):
 		roles = {}
 
 		for r in scope.guild.roles:
-			if r.is_everyone:
+			if r.is_default():
 				continue
 
 			roles[r.id] = {

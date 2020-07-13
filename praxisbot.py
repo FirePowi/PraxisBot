@@ -406,7 +406,7 @@ class Shell:
 
 	async def execute_command(self, scope, commandline):
 		try:
-			if scope.iter > 64:
+			if scope.iter > 128:
 				raise TooLongExecutionError()
 
 			parsedCommand = self.find_command_and_options(commandline, scope.prefixes)
@@ -618,8 +618,8 @@ class Shell:
 		idFound = self.get_sql_data(tablename, [id], where)
 		db = self.dbtable(tablename)
 		if idFound:
-			sqlQuery = "UPDATE {} SET {} = ? WHERE {} = ?".format(db," = ?".join(f.keys()),id)
-			vars = list(fields.values()) + idFound
+			sqlQuery = "UPDATE {} SET {} = ? WHERE {} = ?".format(db," = ?".join(fields.keys()),id)
+			vars = list(fields.values()) + list(idFound)
 			print("REQUEST : {}; with {}".format(sqlQuery,vars))
 			self.dbcon.execute(sqlQuery, vars)
 		else:
