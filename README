@@ -1,12 +1,7 @@
-# install
+#Install (GNU/Linux)
 
-## install dependancies (`apt install` or `pip install`)
+pip3 install websockets pip3 install discord pip3 install python-dateutil mkdir databases lxml cssselect
 
+#Run (GNU/Linux)
 
-    apt install sqlite3 python3-websockets python3-aiohttp python3-tz \
-        python3-dateutil python3-sympy python3-matplotlib python3-scipy
-
-## init bot (db creation)
- 
-
-
+python3 ./praxis.py <BOT_TOKEN>
