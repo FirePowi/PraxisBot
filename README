@@ -1,6 +1,6 @@
 #Install (GNU/Linux)
 
-pip3 install websockets pip3 install discord pip3 install python-dateutil mkdir databases lxml cssselect
+pip3 install websockets discord python-dateutil mkdir databases lxml cssselect
 
 #Run (GNU/Linux)
 
