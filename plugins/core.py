@@ -66,7 +66,8 @@ class HelpMessage():
 			return
 		
 		elif reaction in self.emojis:
-			self.page = self.plugins[self.emojis.index(reaction)]
+			index = self.emojis.index(reaction) + self.page * len(self.emojis)
+			self.page = self.plugins[index]
 			
 		elif reaction == self.home:
 			self.page = 0
@@ -615,7 +616,7 @@ class CorePlugin(praxisbot.Plugin):
 			if args.reactions:
 				for emoji in args.reactions:
 					try:
-						await scope.shell.client.add_reaction(msg, emoji)
+						await msg.add_reaction(emoji)
 					except:
 						pass
 

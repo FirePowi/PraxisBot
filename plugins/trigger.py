@@ -298,9 +298,9 @@ class TriggerPlugin(praxisbot.Plugin):
 
 		scope.shell.set_sql_data("triggers", {"script": "\n".join(lines)}, {"discord_sid":int(scope.guild.id), "command":str(args.command)})
 		if trigger:
-			await scope.shell.print_success(scope, "Trigger `"+args.command+"` edited.")
+			await scope.shell.print_success(scope, "Trigger `{}` edited.".format(args.command))
 		else:
-			await scope.shell.print_success(scope, "Trigger `"+args.command+"` created.")
+			await scope.shell.print_success(scope, "Trigger `{}` created.".format(args.command))
 
 
 	@praxisbot.command
