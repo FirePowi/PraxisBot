@@ -51,6 +51,7 @@ class HTTPPlugin(praxisbot.Plugin):
 		self.add_command("upload", self.execute_upload)
 		self.add_command("css_selector",self.execute_css_selector)
 		self.add_command("extract_attribute",self.execute_extract_attribute)
+		self.add_command("extract_text",self.execute_extract_text)
 
 	@praxisbot.command
 	async def execute_create_cookie(self, scope, command, options, lines, **kwargs):
@@ -289,4 +290,26 @@ class HTTPPlugin(praxisbot.Plugin):
 			scope.vars[args.var] = attribute
 		else:
 			scope.shell.print_success(scope, "The attribute value `{}`".format(attribute))
+	
+	@praxisbot.command
+	@praxisbot.permission_script
+	async def execute_extract_text(self, scope, command, options, lines, **kwargs):
+		"""
+		Get an attribute, given an HTML element
+		"""
 		
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('--var', help='Variable that will contains the text of the attribute.')
+		parser.add_argument('--element_var', help='Variable containing the HTML element.')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+			
+		element_var = args.element_var or "element"
+		element = scope.vars[element_var]
+		
+		text = element.text
+		if args.var:
+			scope.vars[args.var] = text
+		else:
+			scope.shell.print_success(scope, "The content is `{}`".format(text))

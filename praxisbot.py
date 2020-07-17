@@ -325,11 +325,12 @@ class UserPermission:
 	Owner=3
 
 class Shell:
-	def __init__(self, client, dbprefix, dbcon):
+	def __init__(self, client, dbprefix, dbcon, dbfile):
 		self.plugins = []
 		self.client = client
 		self.dbprefix = dbprefix
 		self.dbcon = dbcon
+		self.dbfile = dbfile
 
 	async def print_info(self, scope, msg):
 		if scope.verbose >= 2:

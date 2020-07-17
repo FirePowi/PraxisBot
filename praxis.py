@@ -81,14 +81,15 @@ class PraxisBot(discord.Client):
 
 		self.mode = "testing"
 		self.dbprefix = "pb_"
-		self.dbcon = sqlite3.connect("databases/praxisbot-"+self.mode+".db", detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+		self.dbfile = "databases/praxisbot-{}.db".format(self.mode)
+		self.dbcon = sqlite3.connect(self.dbfile, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
 		self.banned_members = {}
 
 		with self.dbcon:
 			#Server list
 			self.dbcon.execute("CREATE TABLE IF NOT EXISTS "+self.dbprefix+"servers(discord_sid INTEGER PRIMARY KEY, command_prefix TEXT)");
 
-		self.shell = praxisbot.Shell(self, self.dbprefix, self.dbcon)
+		self.shell = praxisbot.Shell(self, self.dbprefix, self.dbcon, self.dbfile)
 
 		self.loopstarted = False
 

@@ -168,6 +168,7 @@ class CorePlugin(praxisbot.Plugin):
 		self.add_command("verbose", self.execute_verbose)
 		self.add_command("silent", self.execute_silent)
 		self.add_command("cite", self.execute_cite)
+		self.add_command("backup_db", self.execute_backup_db)
 		
 	async def on_reaction(self, scope, reaction):
 		helpMessage = self.helpMessages[scope.guild]
@@ -916,4 +917,17 @@ class CorePlugin(praxisbot.Plugin):
 		e.set_footer(text="Cited by "+scope.user.display_name)
 
 		await scope.channel.send("", embed=e)
+		scope.deletecmd = True
+
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_backup_db(self, scope, command, options, lines, **kwargs):
+		"""
+		Give the backup of the database.
+		"""
+
+		dbfile = scope.shell.dbfile
+
+		await scope.user.send("Here is the backup of the database : ",file=discord.File(dbfile))
+		await scope.shell.print_success(scope,"I've just sent you the database backup in Private Message")
 		scope.deletecmd = True
