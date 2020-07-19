@@ -28,6 +28,7 @@ import io
 import praxisbot
 import discord
 import lxml.html
+import os
 
 class HTTPPlugin(praxisbot.Plugin):
 	"""
@@ -42,9 +43,11 @@ class HTTPPlugin(praxisbot.Plugin):
 		self.cookiename_regex = re.compile('[a-zA-Z0-9_-]+')
 
 		self.shell.create_sql_table("cookies", ["id INTEGER PRIMARY KEY", "nameid TEXT", "discord_sid INTEGER", "name TEXT", "content TEXT", "filter TEXT"])
+		self.shell.create_sql_table("cookies_groups", ["id INTEGER_PRIMARY_KEY", "name TEXT", "discord_sid INTEGER", "nameid TEXT"])
 
 		self.add_command("if_http", self.execute_if_http)
 		self.add_command("create_cookie", self.execute_create_cookie)
+		self.add_command("group_cookies", self.execute_group_cookies)
 		self.add_command("delete_cookie", self.execute_delete_cookie)
 		self.add_command("cookies", self.execute_cookies)
 		self.add_command("download", self.execute_download)
@@ -54,6 +57,7 @@ class HTTPPlugin(praxisbot.Plugin):
 		self.add_command("extract_text",self.execute_extract_text)
 
 	@praxisbot.command
+	@praxisbot.permission_admin
 	async def execute_create_cookie(self, scope, command, options, lines, **kwargs):
 		"""
 		Create a cookie for HTTP requests.
@@ -65,7 +69,7 @@ class HTTPPlugin(praxisbot.Plugin):
 		parser.add_argument('id', help='ID of the cookie. This ID is used to delete the cookie.')
 		parser.add_argument('name', help='Name of the cookie.')
 		parser.add_argument('filter', help='Regular expression that restrict usage of the cookie.')
-		parser.add_argument('--force', '-f', action='store_true', help='Replace the trigger if it already exists')
+		parser.add_argument('--force', '-f', action='store_true', help='Replace the cookie if it already exists')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
@@ -86,6 +90,40 @@ class HTTPPlugin(praxisbot.Plugin):
 			await scope.shell.print_success(scope, "Cookie `{}` edited.".format(args.id))
 		else:
 			await scope.shell.print_success(scope, "Cookie `{}` added.".format(args.id))
+	
+	@praxisbot.command
+	@praxisbot.permission_admin
+	async def execute_group_cookies(self, scope, command, options, lines, **kwargs):
+		"""
+		Create a group of cookies
+		"""
+		
+		scope.delete_cookie = True
+		
+		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser.add_argument('name', help='Name of the group of cookies.')
+		parser.add_argument('cookiesID', nargs="*", help='IDs of cookies to group together')
+		parser.add_argument('--force', '-f', action='store_true', help='Replace the group if it already exists')
+		parser.add_argument('--append', '-a', action='store_true', help='Append to the group if it already exists')
+		args = await self.parse_options(scope, parser, options)
+		if not args:
+			return
+			
+		groupID = scope.shell.get_sql_data("cookies_groups", ["id"], {"discord_sid": int(scope.guild.id), "name": str(args.name)})
+		if groupID and not args.force and not args.append:
+			await scope.shell.print_error(scope, "The group `{}` already exists.".format(args.name))
+			return
+		elif args.force:
+			scope.shell.delete_sql_data("cookies_groups", {"discord_sid": scope.guild.id, "name": str(args.name)})
+		
+		for cookie in args.cookiesID:
+			scope.shell.set_sql_data("cookies_groups", {}, {"name": str(args.name), "discord_sid": scope.guild.id, "nameid": str(cookie)})
+			
+		if groupID:
+			await scope.shell.print_success(scope, "Group `{}` edited.".format(args.name))
+		else:
+			await scope.shell.print_success(scope, "Group `{}` added.".format(args.name))
+		
 
 	@praxisbot.command
 	async def execute_delete_cookie(self, scope, command, options, lines, **kwargs):
@@ -108,7 +146,7 @@ class HTTPPlugin(praxisbot.Plugin):
 			await scope.shell.print_error(scope, "The cookie `{}` doesn't exists.".format(args.id))
 			return
 
-		scope.shell.delete_sql_data("cookies", {"discord_sid": int(scope.guild.id), "nameid": str(args.id)})
+		scope.shell.delete_sql_data("cookies", {"discord_sid": scope.guild.id, "nameid": str(args.id)})
 		await scope.shell.print_success(scope, "Cookie `{}` deleted.".format(args.id))
 
 	@praxisbot.command
@@ -126,15 +164,29 @@ class HTTPPlugin(praxisbot.Plugin):
 		stream = praxisbot.MessageStream(scope)
 		await stream.send("**List of HTTP cookies**\n")
 
-		with scope.shell.dbcon:
-			c = scope.shell.dbcon.cursor()
-			cookies = scope.shell.get_sql_data("cookies",["nameid","filter"],{"discord_sid":scope.guild.id},True)
-			if not cookies:
-				await stream.finish()
-				return
-			for row in cookies:
-				await stream.send("\n - {}: `{}`".format(row[0],row[1]))
+		cookies = scope.shell.get_sql_data("cookies",["nameid","filter"],{"discord_sid":scope.guild.id},True)
+		if not cookies:
+			await stream.finish()
+			return
+		for row in cookies:
+			await stream.send("\n - {}: `{}`".format(row[0],row[1]))
 
+		groups = scope.shell.get_sql_data("cookies_groups",["name","nameid"], {"discord_sid":scope.guild.id}, True)
+		if groups:
+			await stream.send("\n\n**List of cookies groups**\n")
+			g_names = []
+			
+			# Get groups names
+			for g in groups:
+				g_names.append(g[0])
+			g_names = list(set(g_names)) # From many iteratinos to one
+			
+			
+			for g in g_names:
+				await stream.send("\nGroup : **{}**".format(g))
+				cookies = scope.shell.get_sql_data("cookies_groups",["nameid"], {"discord_sid":scope.guild.id,"name":g}, True)
+				for c in cookies:
+					await stream.send("\n·{}".format(c[0]))
 		await stream.finish()
 
 	@praxisbot.command
@@ -172,15 +224,17 @@ class HTTPPlugin(praxisbot.Plugin):
 		"""
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser_group = parser.add_mutually_exclusive_group()
 		parser.add_argument('url', help='URL to download')
 		parser.add_argument('--pdf', action="store_true", help='Send result as a pdf file (if possible)')
 		parser.add_argument('--filename', help='Filename sent in Discord')
 		parser.add_argument('--var', help='Variable that will contains the file')
-		parser.add_argument('--cookie', help='Name of a cookie to send with the request.')
+		parser_group.add_argument('--cookie', help='Name of a cookie to send with the request.')
+		parser_group.add_argument('--cookies_group', '-cg', type=str, help='Name of a goup of cookies to send with the request.')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
 			return
-
+		
 		url = scope.format_text(args.url)
 		result = None
 		cookies = {}
@@ -194,6 +248,21 @@ class HTTPPlugin(praxisbot.Plugin):
 				return
 
 			cookies[cookieData[0]] = cookieData[1]
+			print("Using cookies {}".format(cookies))
+		elif args.cookies_group:
+			cookiesID = scope.shell.get_sql_data("cookies_groups", ["nameid"], {"discord_sid": scope.guild.id, "name": args.cookies_group},True)
+			for id in cookiesID:
+				nameid = id[0]
+				cookieData = scope.shell.get_sql_data("cookies", ["name", "content", "filter"], {"discord_sid": scope.guild.id, "nameid": nameid})
+				if not cookieData:
+					await scope.shell.print_error(scope, "Cookie `{}` not found.".format(nameid))
+					return
+				if not re.fullmatch(cookieData[2], url):
+					await scope.shell.print_error(scope, "This cookie can't be used with this URL.")
+					return
+				
+				cookies[cookieData[0]] = cookieData[1]
+			print("Using cookies {}".format(cookies))
 
 		try:
 			result = requests.get(url, allow_redirects=True, cookies=cookies, stream=True)
@@ -209,10 +278,13 @@ class HTTPPlugin(praxisbot.Plugin):
 
 		if args.pdf or args.filename:
 			f = io.BytesIO(result.content)
-			if args.filename:
-				await scope.channel.send(file=discord.File(f,filename=args.filename))
-			else:
-				await scope.channel.send(file=discord.File(f,filename="article.pdf"))
+			try:
+				if args.filename:
+					await scope.channel.send(file=discord.File(f,filename=args.filename))
+				else:
+					await scope.channel.send(file=discord.File(f,filename="article.pdf"))
+			except discord.errors.HTTPException:
+				await scope.shell.print_error(scope, "File impossible to send using discord (Due to 8Mo limit)")
 			f.close()
 		elif args.var:
 			scope.vars[args.var] = result.text
@@ -260,7 +332,7 @@ class HTTPPlugin(praxisbot.Plugin):
 		else:
 			html = lxml.html.fromstring(scope.vars["result"])
 		
-		index = args.index or 0
+		index = args.index and int(args.index) or 0
 		element = html.cssselect(args.css_selector)[index]
 		if args.var:
 			scope.vars[args.var] = element

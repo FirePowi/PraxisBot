@@ -309,7 +309,7 @@ class PollPlugin(praxisbot.Plugin):
 		remaining_time = end_time - current_time
 		remaining_seconds = int(remaining_time.total_seconds())
 		task_key = "{}_{}".format(scope.guild.id,poll_id)
-		asyncio.create_task(self.poll_autokiller(scope,poll_id,remaining_seconds))
+		self.pollKillers[task_key] = asyncio.create_task(self.poll_autokiller(scope,poll_id,remaining_seconds))
 
 		for c in choices:
 			scope.shell.add_sql_data("poll_choices", {"poll": poll_id, "emoji": c["emoji"], "description": c["description"]})

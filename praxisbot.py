@@ -619,7 +619,7 @@ class Shell:
 		idFound = self.get_sql_data(tablename, [id], where)
 		db = self.dbtable(tablename)
 		if idFound:
-			sqlQuery = "UPDATE {} SET {} = ? WHERE {} = ?".format(db," = ?".join(fields.keys()),id)
+			sqlQuery = "UPDATE {} SET {} = ? WHERE {} = ?".format(db," = ?, ".join(fields.keys()),id)
 			vars = list(fields.values()) + list(idFound)
 			print("REQUEST : {}; with {}".format(sqlQuery,vars))
 			self.dbcon.execute(sqlQuery, vars)

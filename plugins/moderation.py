@@ -202,25 +202,14 @@ class ModerationPlugin(praxisbot.Plugin):
 		"""
 
 		parser = argparse.ArgumentParser(description=kwargs["description"], prog=command)
+		parser_group = parser.add_mutually_exclusive_group()
 		parser.add_argument('name', help='Name of the moderator level.')
 		parser.add_argument('priority', help='Priority of the moderator level.')
-		parser.add_argument('--channel', help='All members that can write in this channel.')
-		parser.add_argument('--role', help='All members of this role.')
-		parser.add_argument('--user', help='A specific user.')
+		parser_group.add_argument('--channel', help='All members that can write in this channel.')
+		parser_group.add_argument('--role', help='All members of this role.')
+		parser_group.add_argument('--user', help='A specific user.')
 		args = await self.parse_options(scope, parser, options)
 		if not args:
-			return
-
-		numOptions = 0
-		if args.channel:
-			numOptions = numOptions+1
-		if args.role:
-			numOptions = numOptions+1
-		if args.user:
-			numOptions = numOptions+1
-
-		if numOptions != 1:
-			await scope.shell.print_error(scope, "You must use one and only one of this options: --role, --channel, --user.")
 			return
 
 		modData = scope.shell.get_sql_data("mod_levels", ["id"], {"discord_sid": int(scope.guild.id), "name": str(args.name)})
