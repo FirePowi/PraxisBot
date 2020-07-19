@@ -306,7 +306,10 @@ class HTTPPlugin(praxisbot.Plugin):
 			return
 
 		f = io.BytesIO(scope.format_text(args.data).encode('UTF-8'))
-		await scope.channel.send(file=discord.File(f,filename=args.filename or "article.pdf"))
+		try:
+			await scope.channel.send(file=discord.File(f,filename=args.filename or "article.pdf"))
+		except discord.errors.HTTPException:
+			await scope.shell.print_error(scope, "File impossible to send using discord (Due to 8Mo limit)")
 		f.close()
 
 	@praxisbot.command
